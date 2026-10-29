@@ -229,6 +229,8 @@ export function ensureCapsuleTexture(
   color: number,
   width: number,
   height: number,
+  /** Power-down: dark capsule with hazard stripes, so it reads as "dodge me". */
+  negative = false,
 ): string {
   const key = `capsule:${kind}`;
   if (scene.textures.exists(key)) return key;
@@ -248,6 +250,39 @@ export function ensureCapsuleTexture(
     ctx.arc(inset + r, H / 2, r, Math.PI / 2, (3 * Math.PI) / 2);
     ctx.closePath();
   };
+  if (negative) {
+    ctx.fillStyle = hex(color);
+    pill(0);
+    ctx.fill();
+    ctx.fillStyle = '#0a0d1c';
+    pill(3);
+    ctx.fill();
+    // Hazard stripes, clipped to the inner pill.
+    ctx.save();
+    pill(3);
+    ctx.clip();
+    ctx.fillStyle = hex(shade(color, -0.25));
+    const step = H * 0.7;
+    for (let x = -H; x < W + H; x += step * 2) {
+      ctx.beginPath();
+      ctx.moveTo(x, H);
+      ctx.lineTo(x + step, H);
+      ctx.lineTo(x + step + H, 0);
+      ctx.lineTo(x + H, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = '#0a0d1c';
+    ctx.fillRect(W / 2 - H * 0.75, 3, H * 1.5, H - 6);
+    ctx.restore();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `${Math.round(H * 0.62)}px Bungee, Impact, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(glyph, W / 2, H / 2 + 1);
+    tex.refresh();
+    return key;
+  }
   ctx.fillStyle = hex(shade(color, -0.6));
   pill(0);
   ctx.fill();

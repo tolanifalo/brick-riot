@@ -238,7 +238,7 @@ export function LobbyScreen() {
       </ul>
       {allowed.size === 0 && (
         <p className="mp-small" data-testid="no-boards">
-          Clear Opening Riot in the campaign to unlock your first multiplayer board.
+          Clear level 1 (Kickoff) in the campaign to unlock your first multiplayer board.
         </p>
       )}
 

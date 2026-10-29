@@ -3,7 +3,7 @@ import {
   createAutoplayer,
   createEmptyProgress,
   encodeInputLog,
-  getCampaignBoard,
+  getLevel,
   serializeProgress,
   Simulation,
   type FinishRunResponse,
@@ -29,7 +29,7 @@ afterAll(async () => {
 
 /** Plays a server-issued run with the autoplayer, exactly as the client would. */
 function play(run: IssueRunResponse, mode: 'win' | 'lose' = 'win'): TickInput[] {
-  const board = getCampaignBoard(run.boardId);
+  const board = getLevel(run.boardId);
   if (!board) throw new Error('board');
   const sim = new Simulation(board, { seed: run.seed, config: buildPlayerConfig({ loadout: null, upgrades: run.upgrades }, 'solo') });
   const bot = createAutoplayer(mode);
@@ -90,6 +90,45 @@ describe('verified solo runs', () => {
     const after = (await browser.get('/api/me')).body as ProfileView;
     expect(after.progress.coins).toBe(body.outcome.coins);
     expect(await t.database.db.ledgerEntry.count({ where: { userId: id } })).toBe(2);
+  });
+
+  it('endless levels: clearing level 12 unlocks 13, which the server generates, verifies and ranks', async () => {
+    const { browser, email } = await register(t.url, 'Endless');
+    const id = await userId(browser);
+    await t.database.db.user.update({ where: { email }, data: { emailVerified: true } });
+    // Shortcut past levels 1-11 (covered above): grant level 12 directly.
+    await t.database.db.boardUnlock.create({ data: { userId: id, boardId: 'classic-12', boardVersion: 1, source: 'progression' } });
+    expect((await browser.post('/api/solo/runs', { boardId: 'endless-13' })).status).toBe(403);
+
+    const twelve = await issue(browser, 'classic-12');
+    const r12 = await browser.post(`/api/solo/runs/${twelve.runId}/finish`, { inputs: encodeInputLog(play(twelve)) });
+    expect((r12.body as FinishRunResponse).summary.status).toBe('won');
+    expect((r12.body as FinishRunResponse).outcome.unlocked).toContain('endless-13');
+
+    const thirteen = await issue(browser, 'endless-13');
+    expect(thirteen.boardVersion).toBe(getLevel('endless-13')?.version);
+    const r13 = (await browser.post(`/api/solo/runs/${thirteen.runId}/finish`, { inputs: encodeInputLog(play(thirteen)) })).body as FinishRunResponse;
+    expect(r13.summary.status).toBe('won');
+    expect(r13.outcome.verified).toBe(true);
+    expect(r13.outcome.unlocked).toContain('endless-14');
+    expect(((await browser.get('/api/me')).body as ProfileView).unlockedBoardIds).toEqual(expect.arrayContaining(['endless-13', 'endless-14']));
+
+    const top = (await browser.get('/api/leaderboards/highest_level')).body as LeaderboardPage;
+    expect(top.me).toMatchObject({ value: 13 });
+    const stars = (await browser.get('/api/leaderboards/total_stars')).body as LeaderboardPage;
+    expect(stars.me?.value).toBeGreaterThan(0);
+    const level = (await browser.get('/api/leaderboards/solo_time?board=endless-13')).body as LeaderboardPage;
+    expect(level).toMatchObject({ boardId: 'endless-13', total: 1 });
+    expect((await browser.get('/api/leaderboards/solo_time?board=endless-10000')).status).toBe(400);
+  });
+
+  it('records are kept per board version: Opening Riot (v1) times never show on Kickoff (v2)', async () => {
+    const { browser, email } = await register(t.url, 'Versioned');
+    const id = await userId(browser);
+    await t.database.db.user.update({ where: { email }, data: { emailVerified: true } });
+    await t.database.db.leaderboardEntry.create({ data: { category: 'solo_time', boardId: 'classic-01', seasonId: 'preseason', userId: id, value: 1, evidenceId: 'old' } });
+    const page = (await browser.get('/api/leaderboards/solo_time?board=classic-01')).body as LeaderboardPage;
+    expect(page.rows.some((r) => r.playerId === id)).toBe(false);
   });
 
   it('concurrent duplicate submissions are rewarded once', async () => {

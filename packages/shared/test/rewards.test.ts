@@ -1,6 +1,9 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { ECONOMY, levelForXp } from '../src/config/economy';
-import { CAMPAIGN_BOARDS, CLASSIC_01, CLASSIC_02 } from '../src/levels/classic';
+import { CAMPAIGN_BOARDS, CLASSIC_02 } from '../src/levels/classic';
+// Reward-rule fixture: the frozen Opening Riot v1 (same id as level 1), whose
+// rating, par and mastery targets the expected numbers below were derived from.
+import { OPENING_RIOT_V1 as CLASSIC_01 } from '../src/levels/legacy';
 import {
   applyRunResult,
   computeStars,

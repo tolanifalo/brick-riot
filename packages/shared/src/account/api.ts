@@ -181,7 +181,7 @@ export interface Page<T> {
 
 // ---- Leaderboards ----------------------------------------------------------------
 
-export type LeaderboardCategoryId = 'solo_time' | 'solo_score' | 'mastery' | 'casual_wins';
+export type LeaderboardCategoryId = 'solo_time' | 'solo_score' | 'mastery' | 'casual_wins' | 'highest_level' | 'total_stars';
 
 export interface LeaderboardRow {
   rank: number;

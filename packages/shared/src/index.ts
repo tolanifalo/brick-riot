@@ -7,6 +7,8 @@ export * from './progress/unlocks';
 export * from './progress/results';
 export * from './levels/schema';
 export * from './levels/classic';
+export * from './levels/endless';
+export * from './levels/catalog';
 export * from './math/rng';
 export * from './sim/types';
 export * from './sim/scoring';

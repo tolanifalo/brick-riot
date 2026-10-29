@@ -6,7 +6,7 @@
  * scripted playtests; see BALANCE_CONFIG.md and test/campaign.test.ts.
  */
 
-const BASE_LEGEND = {
+export const BASE_LEGEND = {
   R: { type: 'reinforced', color: 'red' },
   H: { type: 'reinforced', color: 'red', hp: 3 },
   O: { type: 'standard', color: 'orange' },
@@ -20,7 +20,7 @@ const BASE_LEGEND = {
   '#': { type: 'indestructible', color: 'steel' },
 } as const satisfies Record<string, BrickLegendEntry>;
 
-const GRID = { cols: 10, brickHeight: 20, gap: 4, top: 84, sideMargin: 16 } as const;
+export const GRID = { cols: 10, brickHeight: 20, gap: 4, top: 84, sideMargin: 16 } as const;
 
 interface CampaignSpec {
   n: number;
@@ -38,7 +38,7 @@ interface CampaignSpec {
 
 const idOf = (n: number) => `classic-${String(n).padStart(2, '0')}`;
 
-function masteryFor(id: string, targetSeconds: number, combo: number): MasteryObjective[] {
+export function masteryFor(id: string, targetSeconds: number, combo: number): MasteryObjective[] {
   return [
     { id: `${id}-clear`, kind: 'clear' },
     { id: `${id}-lives`, kind: 'minBallsRemaining', balls: 2 },
@@ -70,47 +70,43 @@ function campaignBoard(spec: CampaignSpec): BoardDefinition {
 }
 
 /**
- * Level 1. Its layout, legend, grid and par time are frozen: they are covered
- * by the Phase 1 golden replay fingerprints (test/golden.test.ts).
+ * Level 1, "Kickoff" (v2, 0.6.0). A first board should be quick and fun:
+ * one-hit bricks, two explosives for an early chain reaction, and three
+ * VISIBLE power-up bricks (their letters show) in easy reach: Multiball,
+ * Laser and Wide. Generous random drops, no power-downs.
+ *
+ * The old level 1 (Opening Riot v1, a 3-5 minute slog) is kept frozen in
+ * levels/legacy.ts for the golden replay tests. Same id, so unlocks and saved
+ * progress carry over; the version bump separates old and new records.
  */
 export const CLASSIC_01: BoardDefinition = {
   id: 'classic-01',
-  version: 1,
-  name: 'Opening Riot',
+  version: 2,
+  name: 'Kickoff',
   collection: 'classic',
   theme: 'classic',
-  difficulty: { designerRating: 1.5 },
+  difficulty: { designerRating: 1 },
   unlock: { kind: 'none' },
-  mastery: [
-    { id: 'classic-01-clear', kind: 'clear' },
-    { id: 'classic-01-lives', kind: 'minBallsRemaining', balls: 2 },
-    { id: 'classic-01-fast', kind: 'clearUnderSeconds', seconds: 210 },
-    { id: 'classic-01-clean', kind: 'noBallLost' },
-    { id: 'classic-01-combo', kind: 'minCombo', combo: 8 },
-  ],
+  // Calibrated (8 bot seeds): median 51 s, quartile 45 s, 3-6 power-ups per run.
+  mastery: masteryFor('classic-01', 45, 10),
   multiplayerEligible: true,
-  parTimeSeconds: 120,
-  stars: { twoStarSeconds: 295, threeStarSeconds: 210 },
-  grid: { cols: 10, brickHeight: 20, gap: 4, top: 84, sideMargin: 16 },
+  parTimeSeconds: 55,
+  stars: { twoStarSeconds: 65, threeStarSeconds: 45 },
+  dropChance: 0.12,
+  powerUpPool: ['multiball', 'wide', 'laser', 'net', 'bomb'],
+  grid: GRID,
   legend: {
-    R: { type: 'reinforced', color: 'red' },
-    O: { type: 'standard', color: 'orange' },
-    X: { type: 'explosive', color: 'magenta' },
-    Y: { type: 'standard', color: 'yellow' },
-    '#': { type: 'indestructible', color: 'steel' },
-    G: { type: 'standard', color: 'lime' },
-    C: { type: 'standard', color: 'cyan' },
-    B: { type: 'standard', color: 'blue' },
+    ...BASE_LEGEND,
+    M: { type: 'powerup', color: 'cyan', powerUp: 'multiball' },
+    L: { type: 'powerup', color: 'red', powerUp: 'laser' },
+    W: { type: 'powerup', color: 'lime', powerUp: 'wide' },
   },
   layout: [
-    '.RRRRRRRR.',
-    'RRRRRRRRRR',
-    'OOOXOOXOOO',
-    'YYYYYYYYYY',
-    'Y#YYYYYY#Y',
+    '..OOOOOO..',
+    '.OYYXXYYO.',
+    'OYYMYYLYYO',
     'GGGGGGGGGG',
-    'CCCC..CCCC',
-    '.BBBBBBBB.',
+    'CCCCWCCCCC',
   ],
 };
 

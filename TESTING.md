@@ -5,8 +5,16 @@ and `npm run e2e` (browser tests, including two-browser multiplayer). Board cali
 is a separate report: `npm run calibrate -w @brick-riot/shared`, and multiplayer board
 fairness is `npm run compat -w @brick-riot/shared` (BOARD_COMPATIBILITY.md).
 
-Current totals (Phase 5): **444 unit/integration tests** (shared 281, server 126,
-client 37) and **21 browser tests**, all passing on 2026-10-29.
+Current totals (0.6 in progress): **474 unit/integration tests** (shared 309, server 128,
+client 37), all passing in `npm run check`. Of the **22 browser tests**, the 17
+desktop/phone tests pass; the 5 multiplayer tests were last run (passing) before 0.6.
+
+0.6 additions: `powerdowns.test.ts` (new power-ups and power-downs, opt-in drops,
+validation, replay determinism), `onboarding.test.ts` (level 1 promises),
+`endless.test.ts` (generator fingerprint, levels 13–3000 valid, unique names,
+sawtooth, power-down ramp, bot beats a sample up to 9999, catalog, unlock chain), server
+endless and per-version record tests in `progression.test.ts`, and the e2e endless
+chapter test.
 
 Database tests need no setup: `test/support/globalSetup.ts` starts a throwaway embedded
 PostgreSQL and each test file gets a fresh, migrated database. Set `TEST_DATABASE_URL` to

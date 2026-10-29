@@ -1,4 +1,5 @@
 import { SIM } from '../config/balance';
+import { isPowerDown } from '../config/powerups';
 import type { Simulation } from '../sim/simulation';
 import type { BallState, TickInput } from '../sim/types';
 
@@ -16,6 +17,16 @@ export type AutoplayMode = 'win' | 'lose';
  * ordinary replayable runs.
  */
 export function createAutoplayer(mode: AutoplayMode = 'win'): (sim: Simulation) => TickInput {
+  const decide = createDecider(mode);
+  return (sim) => {
+    const input = decide(sim);
+    // Reversed: aim at the mirror image, as a human would once they adapt.
+    if (sim.inverted && input.targetX !== null) return { ...input, targetX: SIM.worldWidth - input.targetX };
+    return input;
+  };
+}
+
+function createDecider(mode: AutoplayMode): (sim: Simulation) => TickInput {
   let tick = 0;
   let lastRemaining = -1;
   let lastProgressTick = 0;
@@ -70,10 +81,10 @@ function hasLaser(sim: Simulation): boolean {
   return sim.state.effects.laser > 0 && sim.state.laserCooldown === 0;
 }
 
-/** The capsule that reaches the paddle first, with its time to arrival in seconds. */
+/** The power-up (never a power-down) that reaches the paddle first, with its time to arrival in seconds. */
 function nextPickup(sim: Simulation, paddleTop: number): { x: number; time: number } | null {
   let best: { x: number; y: number } | null = null;
-  for (const p of sim.state.pickups) if (p.y < paddleTop && (!best || p.y > best.y)) best = p;
+  for (const p of sim.state.pickups) if (!isPowerDown(p.kind) && p.y < paddleTop && (!best || p.y > best.y)) best = p;
   if (!best) return null;
   return { x: best.x, time: (paddleTop - best.y) / sim.config.powerUps.fallSpeed };
 }

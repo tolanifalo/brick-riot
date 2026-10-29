@@ -40,16 +40,38 @@ Capsules fall from destroyed bricks; catch them with the paddle.
 | Magnet | Paddle catches balls; launch releases (auto after 2.5 s) | 15 s; held balls released |
 | Laser | Launch input fires twin bolts (0.3 s cooldown) | 10 s |
 | Bomb | Next brick contact detonates a 3×3 blast | One use or 12 s |
+| **Safety Net** (0.6) | A glowing barrier under the paddle bounces the next falling ball back up | One save, or 20 s |
+| **Nuke** (0.6, rarest) | Next brick contact detonates a 5×5 blast; steel survives | One use or 12 s |
+
+**Power-downs** (0.6): dark capsules with hazard stripes, so they can be told apart and
+dodged. Catching one anyway pays a **+250 "brave catch"** bonus.
+
+| Power-down | Effect | Ends |
+| ---------- | ------ | ---- |
+| Mini Paddle | Paddle ×0.7 (never below the 60-unit minimum). Waits until no ball is about to land, so it can't cause an unavoidable miss. Cancels Wide Paddle (and Wide cancels it) | 8 s |
+| Reversed | After a 0.75 s "REVERSE INCOMING" warning, left and right swap (keys flip, touch and mouse mirror) | 6 s |
+| Fast Ball | Every ball ×1.35 speed | 8 s |
+
+Where they appear:
+- **Power-up bricks show their letter** (or "?" for a random one), so you can aim for
+  them. They never drop power-downs.
+- Other bricks drop at the board's `dropChance`. Each board chooses which power-ups can
+  drop (`powerUpPool`) and how often a drop is a power-down instead (`powerDownChance`).
+- **Level 1 has no power-downs.** No board drops them yet: they arrive with the endless
+  levels and later campaign boards.
+- Races will use them too (planned): they fall from your own bricks and affect only you.
+  The engine and race prediction already support this; the race boards haven't opted in
+  yet because their fairness data must be re-measured first.
 
 Multiball and lives: a life is lost only when the **last** ball drains. Losing a life
-clears all power-ups.
+clears all power-ups and power-downs.
 
 ## Scoring
 - Destroy points by type, multiplied by the **combo**: each consecutive destroy without
   touching the paddle adds +0.25×, capped at 4×. Touching the paddle or losing a ball
   resets it.
 - Damaging a multi-hit brick without breaking it gives 10 points. Catching a capsule
-  gives 25.
+  gives 25; catching a power-down gives 250.
 - **Clear bonus**: 1000 per ball remaining, plus 25 per whole second under par.
 
 ## Solo campaign (Phase 2)
@@ -57,7 +79,7 @@ clears all power-ups.
 
 | # | Board | Idea |
 | - | ----- | ---- |
-| 1 | Opening Riot | Fundamentals: reinforced crown, two explosives, steel studs |
+| 1 | Kickoff (v2, 0.6) | A quick, fun start (~50 s): one-hit bricks, two explosives, visible Multiball, Laser and Wide bricks, generous drops, no power-downs. Replaces Opening Riot (a 3–5 minute slog; kept only as a test fixture) |
 | 2 | Twin Pillars | Symmetric armoured towers with a channel; first power-up bricks |
 | 3 | Chevron | Downward V; angled shots, explosive heart |
 | 4 | Corridor | Steel vault entered through a two-cell gap: precision |
@@ -72,6 +94,26 @@ clears all power-ups.
 
 Every board is cleared by the scripted autoplayer on 5 seeds in the test suite
 (8 in calibration).
+
+## Endless levels (0.6)
+After the 12 hand-made levels (chapter 1), levels go on to 9999, in chapters of 20.
+Every player gets the same level N: it is generated from the number, which also lets the
+server verify runs.
+
+| Feature | From level |
+| ------- | ---------- |
+| Visible power-up bricks (1–3, more on breathers) | 13 |
+| Heavy Ball / Magnet / Nuke in drops | 15 / 18 / 22 |
+| Power-downs (about 12% of drops, rising to 30%) | 16 |
+| Steel bricks | 18 |
+| Sliding lanes / moving steel gates | 26 / 40 |
+
+- **Difficulty** rises steadily from rating 4 towards 9. Every 10th level is **HARD**
+  and every 50th a **BOSS**. The level after each (and every level ending in 6) is a
+  **breather**: smaller, with more drops and half the power-downs.
+- Clearing a level unlocks the next. There is no lives timer: you can always retry.
+- Leaderboards add **TOP LEVEL** (highest level cleared) and **STARS** (best stars
+  summed).
 
 **Stars**: 1★ clear; 2★ and 3★ for clearing under the board's time thresholds.
 **Mastery**: five objectives per board: clear; clear with 2+ balls left; clear under

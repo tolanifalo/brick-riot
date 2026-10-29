@@ -267,10 +267,31 @@ used**, because ranked is disabled.
 | Magnet | 15 s | max hold seconds | 2.5 | 16 | — |
 | Laser | 10 s | damage per bolt | 1 | 14 | 0.3 s |
 | Bomb | 12 s (or one use) | blast radius in cells | 1 | 14 | — |
+| Safety Net | 20 s (or one save) | saves | 1 | 12 | — |
+| Nuke | 12 s (or one use) | blast radius in cells (5×5) | 2 | 4 | — |
+
+Power-downs (weights compared among power-downs only):
+
+| Power-down | Duration | Strength meaning | Strength | Drop weight |
+| ---------- | -------- | ---------------- | -------- | ----------- |
+| Mini Paddle | 8 s (starts when safe) | width multiplier (floor 60 u) | 0.7 | 10 |
+| Reversed | 6 s (after the warning) | warning seconds | 0.75 | 8 |
+| Fast Ball | 8 s | ball speed multiplier | 1.35 | 10 |
+
+| Key | Value | Notes |
+| --- | ----- | ----- |
+| powerDownBonus | 250 | points for catching a power-down (instead of 25) |
+| netY | 782 | Safety Net line (paddle at 728, bottom at 800) |
+
+Per-board drop settings: `dropChance` (any brick), `powerUpPool` (default: the Phase 2
+six, in their Phase 2 order), `powerDownChance` (share of ordinary drops that are
+power-downs, default 0). Power-up bricks never drop power-downs.
 
 Rules:
 - Collecting an active timed power-up refreshes it to full duration (no stacking).
-- Losing a life clears all effects, capsules and bolts.
+- Wide Paddle and Mini Paddle cancel each other (the paddle returns to normal).
+- An armed Nuke goes off before an armed Bomb; the Bomb then waits for the next contact.
+- Losing a life clears all effects (power-downs included), capsules and bolts.
 - Heavy and Bomb combine: a smashed brick also detonates.
 - The launch input releases magnet-held balls and fires the laser.
 
@@ -303,7 +324,7 @@ completion target. The "fast" mastery objective equals the 3★ time.
 
 | # | Board | Rating | Par | 2★ | 3★ | Combo mastery | Drop chance |
 | - | ----- | ------ | --- | -- | -- | ------------- | ----------- |
-| 1 | Opening Riot | 1.5 | 120* | 295 | 210 | ×8 | 0 |
+| 1 | Kickoff (v2) | 1 | 55 | 65 | 45 | ×10 | 0.12* |
 | 2 | Twin Pillars | 2 | 90 | 105 | 75 | ×8 | 0.04 |
 | 3 | Chevron | 2.5 | 75 | 90 | 50 | ×10 | 0.05 |
 | 4 | Corridor | 3 | 195 | 225 | 120 | ×12 | 0.05 |
@@ -316,7 +337,28 @@ completion target. The "fast" mastery objective equals the 3★ time.
 | 11 | Reactor | 6.5 | 85 | 100 | 55 | ×15 | 0.04 |
 | 12 | Riot Finale | 7.5 | 255 | 295 | 150 | ×12 | 0.08 |
 
-\* Opening Riot's par is frozen at its Phase 1 value (golden replays).
+\* Kickoff drops only Multiball, Wide, Laser, Safety Net and Bomb (`powerUpPool`), never
+power-downs, and has three fixed power-up bricks. Bot calibration: median 51 s, quartile
+45 s, 3–6 power-ups per run. The previous level 1, Opening Riot v1 (par 120, median
+~256 s), is frozen in `levels/legacy.ts` for the golden replays and is no longer played.
+
+### Endless levels (`levels/endless.ts`, generator v1)
+| Rule | Value |
+| ---- | ----- |
+| Rating | 4 + 5·k/(k+100), k = level − 13; HARD +1, BOSS +1.8, breather −1; clamped 1.5–10 |
+| Rows | 4 + ⌊rating × 0.55⌋ + 0–1 (breather −1), 5–10, plus lane rows |
+| Reinforced share | (rating − 2.5) × 9%, max 50%; 3-hit share among them (rating − 5) × 8%, max 35% |
+| Steel | from 18 (not on breathers), up to min(3, rating − 3) mirrored pairs, ≤ 4 per row, never in two adjacent rows |
+| Sliding lane | from 26, chance 20% rising 0.4%/level to 50%, speed 50 + 7 × rating (max 120) |
+| Moving steel gate | from 40, 25% (not breathers) |
+| Drop chance | 8% (HARD/BOSS 10%, breather 12%) |
+| Power-down share | 0 before 16, then 12% + 0.3%/level, max 30% (breather half, BOSS +5%) |
+| Estimate | 18 s + 1 s per hit point + 8 s per steel cell + 10 s per lane |
+| Par / 2★ / 3★ | estimate / ×1.2 / ×0.85, rounded up to 5 s |
+
+`npm run calibrate:endless -w @brick-riot/shared` plays 30 levels (13–300) on 5 seeds
+and fits the estimate. v1 result: every level was cleared on every seed. Medians vary 2–3×
+for the same work because layout matters a lot, so stars are approximate.
 
 ### How these were calibrated
 `npm run calibrate -w @brick-riot/shared` plays every board with the scripted

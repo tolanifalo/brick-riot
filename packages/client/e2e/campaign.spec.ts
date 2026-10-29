@@ -130,6 +130,47 @@ test('late boards render moving bricks, capsules and active power-ups @desktop',
   await page.screenshot({ path: 'test-results/late-board-paused.png' });
 });
 
+test('endless: after the 12 hand-made levels, generated level 13 opens in chapter 2, plays and unlocks 14 @desktop', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    const boards: Record<string, unknown> = {};
+    for (let n = 1; n <= 12; n++) {
+      const id = `classic-${String(n).padStart(2, '0')}`;
+      boards[id] = { boardId: id, attempts: 1, completions: 1, bestScore: 1000, bestTimeMs: 100_000, bestStars: 1, mastery: [] };
+    }
+    localStorage.setItem(
+      'brick-riot:save',
+      JSON.stringify({ format: 'brick-riot-save', version: 1, savedAt: '2026-10-29T00:00:00.000Z', data: { xp: 9000, coins: 0, boards, history: [], appliedRunIds: [] } }),
+    );
+    sessionStorage.setItem('seeded', '1');
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /PLAY SOLO/ }).click();
+  // The current level is 13, so the screen opens on chapter 2 (generated levels 13-32).
+  await expect(page.getByTestId('chapter-title')).toHaveText('CHAPTER 2 · LEVELS 13-32');
+  await expect(page.locator('[data-testid^="level-card-"]')).toHaveCount(20);
+  await expect(page.getByTestId('level-card-endless-13')).toContainText('CURRENT');
+  await expect(page.getByTestId('level-card-endless-14')).toHaveAttribute('data-locked', 'true');
+  await expect(page.getByTestId('level-card-endless-20')).toContainText('HARD');
+  await page.screenshot({ path: 'test-results/endless-chapter.png', fullPage: true });
+  // Chapter navigation: back to the hand-made chapter, and no further than one chapter ahead.
+  await page.getByTestId('chapter-prev').click();
+  await expect(page.getByTestId('chapter-title')).toHaveText('CHAPTER 1 · LEVELS 1-12');
+  await page.getByTestId('chapter-next').click();
+  await expect(page.getByTestId('chapter-next')).toBeDisabled();
+
+  await page.getByTestId('level-card-endless-13').click();
+  await page.getByTestId('play-board').click();
+  await expect(page.locator('canvas')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => window.__BRICK_RIOT_E2E__?.snapshot().boardId)).toBe('endless-13');
+  await setAutopilot(page, 'win', 32);
+  const result = page.getByRole('dialog', { name: 'BOARD CLEAR' });
+  await expect(result).toBeVisible({ timeout: 200_000 });
+  await expect(page.getByTestId('unlock-notice')).toContainText('14.');
+  await expect(page.getByTestId('next-level')).toBeVisible();
+});
+
 test('campaign is usable on a phone @mobile', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /PLAY SOLO/ }).click();

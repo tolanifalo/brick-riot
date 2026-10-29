@@ -6,7 +6,8 @@ import {
   createEmptyProgress,
   decodeInputLog,
   encodeInputLog,
-  getCampaignBoard,
+  getLevel,
+  highestLevel,
   isAbilityUnlocked,
   isBoardUnlocked,
   levelForXp,
@@ -16,12 +17,15 @@ import {
   NO_UPGRADES,
   parseSave,
   rateEquipment,
+  recordKey,
   replayRun,
   sanitizeUpgradeLevels,
   summarizeRun,
+  unlockCandidates,
   UPGRADE_IDS,
   validateLoadout,
   type AbilityId,
+  type BoardDefinition,
   type BoardProgress,
   type EncodedRun,
   type Equipment,
@@ -157,7 +161,7 @@ export class ProgressionService {
 
   /** Starts a verifiable solo run: the server chooses the seed and snapshots the equipment. */
   async issueRun(userId: string, boardId: unknown): Promise<IssueRunResponse> {
-    const board = typeof boardId === 'string' ? getCampaignBoard(boardId) : undefined;
+    const board = typeof boardId === 'string' ? getLevel(boardId) : undefined;
     if (!board) throw new ApiError(400, 'unknown_board');
     const unlocked = await this.db.boardUnlock.findUnique({ where: { userId_boardId: { userId, boardId: board.id } } });
     if (!unlocked) throw new ApiError(403, 'board_locked');
@@ -184,7 +188,7 @@ export class ProgressionService {
       await this.db.soloRun.updateMany({ where: { id: run.id, status: 'issued' }, data: { status: 'expired' } });
       throw new ApiError(409, 'expired');
     }
-    const board = getCampaignBoard(run.boardId);
+    const board = getLevel(run.boardId);
     if (!board || board.version !== run.boardVersion) throw new ApiError(409, 'board_changed');
     const decoded = decodeInputLog(encodedInputs);
     if (!decoded.ok) throw new ApiError(400, decoded.error);
@@ -223,7 +227,7 @@ export class ProgressionService {
         const updated = await this.credit(tx, userId, outcome.xp, outcome.coins, 'solo_reward', run.id, `solo:${run.id}`);
         await this.refreshUnlocks(tx, userId, updated.xp);
 
-        if (outcome.won) await this.recordSoloLeaderboards(tx, userId, board.id, state.elapsedTicks, summary.score, run.id);
+        if (outcome.won) await this.recordSoloLeaderboards(tx, userId, board, state.elapsedTicks, summary.score, run.id);
 
         const stored: StoredRunResult = { summary, outcome };
         await tx.soloRun.update({
@@ -318,7 +322,8 @@ export class ProgressionService {
     for (const r of [...verified, ...imported]) {
       progress.boards[r.boardId] = { ...createEmptyBoardProgress(r.boardId), completions: r.completions };
     }
-    const unlocked = CAMPAIGN_BOARDS.filter((b) => isBoardUnlocked(b, progress));
+    // Chapter 1 plus the level after each cleared one (endless levels are generated, not listed).
+    const unlocked = unlockCandidates(Object.keys(progress.boards)).filter((b) => isBoardUnlocked(b, progress));
     const result = await tx.boardUnlock.createMany({
       data: unlocked.map((b) => ({ userId, boardId: b.id, boardVersion: b.version, source: 'progression' as const })),
       skipDuplicates: true,
@@ -326,8 +331,20 @@ export class ProgressionService {
     return result.count > 0 ? unlocked.map((b) => b.id) : [];
   }
 
-  /** Best verified time (lower wins), best score, and total mastery: one row per player and category. */
-  private async recordSoloLeaderboards(tx: Tx, userId: string, boardId: string, ticks: number, score: number, runId: string): Promise<void> {
+  /**
+   * Best verified time (lower wins) and score per board version, plus the
+   * account-wide totals (mastery, highest level, stars): one row per player
+   * and category.
+   */
+  private async recordSoloLeaderboards(
+    tx: Tx,
+    userId: string,
+    board: BoardDefinition,
+    ticks: number,
+    score: number,
+    runId: string,
+  ): Promise<void> {
+    const boardId = recordKey(board);
     await tx.$executeRaw`
       INSERT INTO "leaderboard_entry" ("category", "boardId", "seasonId", "userId", "value", "evidenceId", "achievedAt")
       VALUES ('solo_time', ${boardId}, ${PRESEASON}, ${userId}, ${ticks}, ${runId}, now())
@@ -340,12 +357,20 @@ export class ProgressionService {
       ON CONFLICT ("category", "boardId", "seasonId", "userId")
       DO UPDATE SET "value" = EXCLUDED."value", "evidenceId" = EXCLUDED."evidenceId", "achievedAt" = EXCLUDED."achievedAt"
       WHERE "leaderboard_entry"."value" < EXCLUDED."value"`;
-    const rows = await tx.soloBoardProgress.findMany({ where: { userId }, select: { masteryDone: true } });
+    const rows = await tx.soloBoardProgress.findMany({ where: { userId }, select: { masteryDone: true, bestStars: true, boardId: true, completions: true } });
     const mastery = rows.reduce((n, r) => n + r.masteryDone.length, 0);
-    if (mastery > 0) {
+    const stars = rows.reduce((n, r) => n + r.bestStars, 0);
+    const highest = highestLevel(rows.filter((r) => r.completions > 0).map((r) => r.boardId));
+    const totals = [
+      ['mastery', mastery],
+      ['total_stars', stars],
+      ['highest_level', highest],
+    ] as const;
+    for (const [category, value] of totals) {
+      if (value <= 0) continue;
       await tx.$executeRaw`
         INSERT INTO "leaderboard_entry" ("category", "boardId", "seasonId", "userId", "value", "evidenceId", "achievedAt")
-        VALUES ('mastery', '*', ${PRESEASON}, ${userId}, ${mastery}, ${runId}, now())
+        VALUES (${category}::"LeaderboardCategory", '*', ${PRESEASON}, ${userId}, ${value}, ${runId}, now())
         ON CONFLICT ("category", "boardId", "seasonId", "userId")
         DO UPDATE SET "value" = EXCLUDED."value", "evidenceId" = EXCLUDED."evidenceId", "achievedAt" = EXCLUDED."achievedAt"
         WHERE "leaderboard_entry"."value" < EXCLUDED."value"`;
@@ -489,7 +514,7 @@ export class ProgressionService {
     const saveHash = createHash('sha256').update(raw).digest('hex');
 
     const records = Object.values(local.boards)
-      .filter((b) => b.completions > 0 && getCampaignBoard(b.boardId))
+      .filter((b) => b.completions > 0 && getLevel(b.boardId))
       .map((b) => ({
         userId,
         boardId: b.boardId,
@@ -510,7 +535,7 @@ export class ProgressionService {
         progress.xp = profile.xp;
         const verified = await tx.soloBoardProgress.findMany({ where: { userId, completions: { gt: 0 } } });
         for (const r of [...verified, ...records]) progress.boards[r.boardId] = { ...createEmptyBoardProgress(r.boardId), completions: r.completions };
-        const unlocked = CAMPAIGN_BOARDS.filter((b) => isBoardUnlocked(b, progress) && !before.has(b.id));
+        const unlocked = unlockCandidates(Object.keys(progress.boards)).filter((b) => isBoardUnlocked(b, progress) && !before.has(b.id));
         await tx.boardUnlock.createMany({
           data: unlocked.map((b) => ({ userId, boardId: b.id, boardVersion: b.version, source: 'import' as const })),
           skipDuplicates: true,

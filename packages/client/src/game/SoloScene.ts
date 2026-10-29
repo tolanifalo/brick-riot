@@ -134,6 +134,9 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
   protected autopilotSpeed = 1;
   protected uninstallHooks: () => void = () => undefined;
   protected shieldRing!: Phaser.GameObjects.Image;
+  /** Icons printed on power-up bricks, so players can see (and aim for) what they hold. */
+  protected readonly brickGlyphs = new Map<number, Phaser.GameObjects.Text>();
+  protected netLine!: Phaser.GameObjects.Rectangle;
   /** Fewer particles and no camera shake. */
   protected readonly reduced: boolean;
 
@@ -247,6 +250,8 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
       sprite.destroy();
     }
     this.brickSprites = [];
+    for (const glyph of this.brickGlyphs.values()) glyph.destroy();
+    this.brickGlyphs.clear();
     this.flashUntil.clear();
     for (const view of this.ballViews.values()) {
       view.core.destroy();
@@ -384,6 +389,11 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
       .setVisible(false)
       .setDepth(9)
       .setBlendMode(Phaser.BlendModes.ADD);
+    this.netLine = this.add
+      .rectangle(SIM.worldWidth / 2, BALANCE.powerUps.netY + 2, SIM.worldWidth - 8, 4, this.theme.bricks.blue, 1)
+      .setVisible(false)
+      .setDepth(8)
+      .setBlendMode(Phaser.BlendModes.ADD);
   }
 
   protected brickTexture(brick: BrickState): string {
@@ -409,6 +419,23 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
       .setVisible(brick.alive);
     if (brick.type === 'explosive' || brick.type === 'powerup') {
       this.tweens.add({ targets: sprite, alpha: 0.72, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    }
+    if (brick.type === 'powerup' && brick.powerUp) {
+      // Fixed drops show their capsule letter; random ones show "?".
+      const glyph = brick.powerUp === 'random' ? '?' : POWER_UP_INFO[brick.powerUp].glyph;
+      const label = this.add
+        .text(brick.x + brick.width / 2, brick.y + brick.height / 2 + 1, glyph, {
+          fontFamily: 'Bungee, Impact, sans-serif',
+          fontSize: `${Math.round(brick.height * 0.7)}px`,
+          color: '#ffffff',
+          stroke: '#0a0d1c',
+          strokeThickness: 3,
+          resolution: this.opts.resolution,
+        })
+        .setOrigin(0.5)
+        .setDepth(2)
+        .setVisible(brick.alive);
+      this.brickGlyphs.set(brick.id, label);
     }
     this.brickSprites[brick.id] = sprite;
     return sprite;
@@ -497,7 +524,7 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
     if (!view) {
       const info = POWER_UP_INFO[kind];
       const cfg = this.sim.config.powerUps;
-      const key = ensureCapsuleTexture(this, kind, info.glyph, this.theme.bricks[info.color], cfg.capsuleWidth, cfg.capsuleHeight);
+      const key = ensureCapsuleTexture(this, kind, info.glyph, this.theme.bricks[info.color], cfg.capsuleWidth, cfg.capsuleHeight, info.negative);
       view = this.add.image(0, 0, key).setDisplaySize(cfg.capsuleWidth, cfg.capsuleHeight).setDepth(14);
       this.pickupViews.set(id, view);
     }
@@ -571,7 +598,13 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
     this.paddle.setPosition(px, s.paddle.y);
     this.paddleGlow.setPosition(px, s.paddle.y + 4);
     const jammed = s.debuff?.kind === 'emp' && s.debuff.phase === 'active';
-    this.paddleGlow.setTint(jammed ? 0xffd60a : s.effects.magnet > 0 ? this.theme.bricks.violet : this.theme.paddleCap);
+    const reversed = this.sim.inverted;
+    this.paddleGlow.setTint(
+      jammed ? 0xffd60a : reversed ? this.theme.bricks.red : s.effects.magnet > 0 ? this.theme.bricks.violet : this.theme.paddleCap,
+    );
+    const net = s.effects.net > 0;
+    this.netLine.setVisible(net);
+    if (net) this.netLine.setAlpha(this.reduced ? 0.8 : 0.55 + 0.3 * Math.sin(time / 140));
     // EMP: power-up systems flicker (static), but the paddle itself still moves normally.
     this.paddleGlow.setAlpha(jammed ? (this.reduced ? 0.25 : 0.15 + 0.35 * (Math.floor(time / 70) % 2)) : 0.45);
     const shielded = s.shieldUntil > s.tick;
@@ -597,7 +630,7 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
 
     // Balls
     const heavy = s.effects.heavy > 0;
-    const glowTint = heavy ? this.theme.bricks.orange : this.theme.ballGlow;
+    const glowTint = s.effects.fast > 0 ? this.theme.bricks.red : heavy ? this.theme.bricks.orange : this.theme.ballGlow;
     const live = new Set<number>();
     let leadX = 0;
     let leadY = 0;
@@ -627,11 +660,16 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
       this.ballViews.delete(id);
       this.prevBallPos.delete(id);
     }
-    const bomb = s.effects.bomb > 0 && hasLead;
+    const nuke = s.effects.nuke > 0 && hasLead;
+    const bomb = (nuke || s.effects.bomb > 0) && hasLead;
     this.bombRing.setVisible(bomb);
     if (bomb) {
-      const pulse = 26 + Math.sin(time / 90) * 4;
-      this.bombRing.setPosition(leadX, leadY).setDisplaySize(pulse, pulse);
+      // An armed Nuke shows a larger, faster ring than a Bomb.
+      const pulse = nuke ? 38 + Math.sin(time / 60) * 7 : 26 + Math.sin(time / 90) * 4;
+      this.bombRing
+        .setPosition(leadX, leadY)
+        .setDisplaySize(pulse, pulse)
+        .setTint(nuke ? this.theme.bricks.yellow : this.theme.bricks.magenta);
     }
 
     // Pickups and laser bolts
@@ -681,6 +719,7 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
           if (!brick || !sprite) break;
           const color = this.brickColor(brick.color);
           if (e.destroyed) {
+            this.brickGlyphs.get(e.brickId)?.setVisible(false);
             this.flashUntil.delete(sprite);
             this.tweens.killTweensOf(sprite);
             sprite.setTintFill(0xffffff).setAlpha(1);
@@ -708,6 +747,16 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
           break;
         }
         case 'explosion':
+          if (e.source === 'nuke') {
+            this.shockwave(e.x, e.y, 340);
+            this.time.delayedCall(90, () => this.shockwave(e.x, e.y, 260));
+            this.burst(this.theme.bricks.yellow, e.x, e.y, 30);
+            this.burst(0xffffff, e.x, e.y, 20);
+            this.burst(this.theme.bricks.magenta, e.x, e.y, 24);
+            this.shake(260, 0.009);
+            this.popup('NUKE!', e.x, e.y - 20, '#ffd60a', 1.5);
+            break;
+          }
           this.shockwave(e.x, e.y, e.source === 'bomb' ? 200 : 150);
           this.burst(this.theme.bricks.magenta, e.x, e.y, 18);
           this.burst(this.theme.bricks.yellow, e.x, e.y, 12);
@@ -746,11 +795,34 @@ export class SoloScene extends Phaser.Scene implements SceneCommands {
           const info = POWER_UP_INFO[e.kind];
           const color = this.theme.bricks[info.color];
           this.burst(color, e.x, e.y, 16);
-          this.popup(info.label.toUpperCase(), s.paddle.x, s.paddle.y - 34, `#${shade(color, 0.2).toString(16).padStart(6, '0')}`, 1.25);
+          if (info.negative) {
+            this.popup(info.label.toUpperCase(), s.paddle.x, s.paddle.y - 34, '#ff4d6d', 1.25);
+            this.popup(`+${this.sim.config.powerUps.powerDownBonus} BRAVE`, s.paddle.x, s.paddle.y - 62, '#ffd60a', 1.05);
+            if (e.kind === 'invert') this.popup('REVERSE INCOMING', SIM.worldWidth / 2, s.paddle.y - 92, '#ff4d6d', 1.2);
+            this.shake(80, 0.002);
+          } else {
+            this.popup(info.label.toUpperCase(), s.paddle.x, s.paddle.y - 34, `#${shade(color, 0.2).toString(16).padStart(6, '0')}`, 1.25);
+          }
           this.paddle.setTintFill(color);
           this.time.delayedCall(70, () => this.paddle.clearTint());
           break;
         }
+        case 'effectStarted':
+          if (e.kind === 'invert') {
+            this.popup('CONTROLS REVERSED', SIM.worldWidth / 2, s.paddle.y - 80, '#ff4d6d', 1.3);
+            this.burst(this.theme.bricks.red, s.paddle.x, s.paddle.y, 12);
+          } else if (e.kind === 'mini') {
+            this.burst(this.theme.bricks.red, s.paddle.x, s.paddle.y, 10);
+          }
+          break;
+        case 'netSave':
+          this.netLine.setFillStyle(0xffffff);
+          this.time.delayedCall(80, () => this.netLine.setFillStyle(this.theme.bricks.blue));
+          this.burst(this.theme.bricks.blue, e.x, e.y, 22);
+          this.burst(0xffffff, e.x, e.y, 10);
+          this.popup('SAVED!', e.x, e.y - 30, '#5ef1ff', 1.3);
+          this.shake(90, 0.003);
+          break;
         case 'multiball':
           this.burst(this.theme.bricks.cyan, s.paddle.x, s.paddle.y - 60, 14);
           break;

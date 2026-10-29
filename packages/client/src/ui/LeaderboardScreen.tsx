@@ -1,4 +1,4 @@
-import { CAMPAIGN_BOARDS, type LeaderboardCategoryId, type LeaderboardPage, type RankedStatus } from '@brick-riot/shared';
+import { getLevelAt, LAST_LEVEL, type LeaderboardCategoryId, type LeaderboardPage, type RankedStatus } from '@brick-riot/shared';
 import { useEffect, useState } from 'react';
 import { api, describeApiError } from '../net/api';
 import { useApp } from '../state/appStore';
@@ -8,13 +8,26 @@ type Tab = LeaderboardCategoryId | 'ranked';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'solo_time', label: 'FASTEST' },
   { id: 'solo_score', label: 'HIGH SCORE' },
+  { id: 'highest_level', label: 'TOP LEVEL' },
+  { id: 'total_stars', label: 'STARS' },
   { id: 'mastery', label: 'MASTERY' },
   { id: 'casual_wins', label: 'QUICK WINS' },
   { id: 'ranked', label: 'RANKED' },
 ];
 
+const NOTES: Record<LeaderboardCategoryId, string> = {
+  solo_time: 'Only runs replayed and verified by the server count. Verified-email accounts only.',
+  solo_score: 'Only runs replayed and verified by the server count. Verified-email accounts only.',
+  highest_level: 'The furthest level cleared in a server-verified run. Levels never end.',
+  total_stars: 'Best stars summed over every level, from server-verified runs.',
+  mastery: 'Mastery objectives completed in verified runs.',
+  casual_wins: 'Quick Match wins (casual, unranked).',
+};
+
 function formatValue(category: LeaderboardCategoryId, value: number): string {
   if (category === 'solo_time') return `${(value / 120).toFixed(2)}s`;
+  if (category === 'highest_level') return `Level ${value.toLocaleString('en-US')}`;
+  if (category === 'total_stars') return `${value.toLocaleString('en-US')} stars`;
   return value.toLocaleString('en-US');
 }
 
@@ -26,7 +39,9 @@ function formatValue(category: LeaderboardCategoryId, value: number): string {
 export function LeaderboardScreen() {
   const setScreen = useApp((s) => s.setScreen);
   const [tab, setTab] = useState<Tab>('solo_time');
-  const [board, setBoard] = useState(CAMPAIGN_BOARDS[0]?.id ?? 'classic-01');
+  const [level, setLevel] = useState(1);
+  const levelBoard = getLevelAt(level);
+  const board = levelBoard?.id ?? 'classic-01';
   const [page, setPage] = useState(1);
   const [data, setData] = useState<LeaderboardPage | null>(null);
   const [ranked, setRanked] = useState<RankedStatus | null>(null);
@@ -92,23 +107,51 @@ export function LeaderboardScreen() {
         ))}
       </div>
       {perBoard && (
-        <label className="field">
-          <span>Board</span>
-          <select
-            value={board}
-            onChange={(e) => {
-              setBoard(e.target.value);
+        <div className="lb-level" data-testid="lb-level">
+          <button
+            type="button"
+            className="btn ghost chapter-arrow"
+            disabled={level <= 1}
+            onClick={() => {
+              setLevel((l) => Math.max(1, l - 1));
               setPage(1);
             }}
-            data-testid="lb-board"
+            aria-label="Previous level"
           >
-            {CAMPAIGN_BOARDS.map((b, i) => (
-              <option key={b.id} value={b.id}>
-                {i + 1}. {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            ◀
+          </button>
+          <label className="field">
+            <span>Level</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={LAST_LEVEL}
+              value={level}
+              onChange={(e) => {
+                const n = Math.floor(Number(e.target.value));
+                if (Number.isFinite(n)) setLevel(Math.min(LAST_LEVEL, Math.max(1, n)));
+                setPage(1);
+              }}
+              data-testid="lb-level-input"
+            />
+          </label>
+          <span className="lb-level-name" data-testid="lb-level-name">
+            {levelBoard?.name}
+          </span>
+          <button
+            type="button"
+            className="btn ghost chapter-arrow"
+            disabled={level >= LAST_LEVEL}
+            onClick={() => {
+              setLevel((l) => Math.min(LAST_LEVEL, l + 1));
+              setPage(1);
+            }}
+            aria-label="Next level"
+          >
+            ▶
+          </button>
+        </div>
       )}
       {error && <p className="mp-error">{error}</p>}
 
@@ -123,13 +166,7 @@ export function LeaderboardScreen() {
         </section>
       ) : (
         <>
-          <p className="mp-small">
-            {tab === 'solo_time' || tab === 'solo_score'
-              ? 'Only runs replayed and verified by the server count. Verified-email accounts only.'
-              : tab === 'mastery'
-                ? 'Mastery objectives completed in verified runs.'
-                : 'Quick Match wins (casual, unranked).'}
-          </p>
+          <p className="mp-small">{NOTES[tab]}</p>
           {data && data.rows.length === 0 && <p className="mp-small">No entries yet. Be the first.</p>}
           <ol className="lb-list" data-testid="lb-rows">
             {data?.rows.map((r) => (

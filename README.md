@@ -87,6 +87,9 @@ npm run start:server   # terminal 2: game server on :2567 (prints LAN addresses)
 npm run dev            # terminal 3: client on http://localhost:5173
 ```
 
+**Windows shortcut:** double-click `start-dev.cmd` in the project folder. It opens the
+three windows above and the game in your browser. Close those windows to stop.
+
 Solo play works without any server. Without `db:start`, the game server still runs
 private rooms for guests, and prints `accounts OFF`. Use `npm run dev:server` for
 auto-reload while developing the server.

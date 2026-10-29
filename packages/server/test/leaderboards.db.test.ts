@@ -16,13 +16,13 @@ beforeAll(async () => {
     ids[i] = id;
     await t.database.db.user.update({ where: { email }, data: { emailVerified: true } });
     await t.database.db.leaderboardEntry.create({
-      data: { category: 'solo_time', boardId: 'classic-01', seasonId: 'preseason', userId: id, value: 1000 + i * 100, evidenceId: `run-${i}` },
+      data: { category: 'solo_time', boardId: 'classic-02', seasonId: 'preseason', userId: id, value: 1000 + i * 100, evidenceId: `run-${i}` },
     });
   }
   const { browser } = await register(t.url, 'Unverified');
   const id = ((await browser.get('/api/me')).body as ProfileView).account.id;
   await t.database.db.leaderboardEntry.create({
-    data: { category: 'solo_time', boardId: 'classic-01', seasonId: 'preseason', userId: id, value: 1, evidenceId: 'run-x' },
+    data: { category: 'solo_time', boardId: 'classic-02', seasonId: 'preseason', userId: id, value: 1, evidenceId: 'run-x' },
   });
 });
 
@@ -33,12 +33,12 @@ afterAll(async () => {
 describe('leaderboards', () => {
   it('sorts (fastest first), paginates and counts; unverified emails are not listed', async () => {
     const anon = new Browser(t.url);
-    const p1 = (await anon.get('/api/leaderboards/solo_time?board=classic-01&pageSize=10')).body as LeaderboardPage;
+    const p1 = (await anon.get('/api/leaderboards/solo_time?board=classic-02&pageSize=10')).body as LeaderboardPage;
     expect(p1.total).toBe(25);
     expect(p1.rows.map((r) => r.rank)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(p1.rows[0]).toMatchObject({ name: 'Runner00', value: 1000 });
     expect(p1.rows.every((r, i, all) => i === 0 || (all[i - 1]?.value ?? 0) <= r.value)).toBe(true);
-    const p3 = (await anon.get('/api/leaderboards/solo_time?board=classic-01&pageSize=10&page=3')).body as LeaderboardPage;
+    const p3 = (await anon.get('/api/leaderboards/solo_time?board=classic-02&pageSize=10&page=3')).body as LeaderboardPage;
     expect(p3.rows.map((r) => r.rank)).toEqual([21, 22, 23, 24, 25]);
     expect(p3.rows.map((r) => r.name)).not.toContain('Unverified');
     expect(p1.me).toBeNull();
@@ -47,7 +47,7 @@ describe('leaderboards', () => {
   it('one row per player and category: a duplicate entry is impossible', async () => {
     await expect(
       t.database.db.leaderboardEntry.create({
-        data: { category: 'solo_time', boardId: 'classic-01', seasonId: 'preseason', userId: ids[3] ?? '', value: 5, evidenceId: 'dup' },
+        data: { category: 'solo_time', boardId: 'classic-02', seasonId: 'preseason', userId: ids[3] ?? '', value: 5, evidenceId: 'dup' },
       }),
     ).rejects.toThrow();
   });
@@ -57,7 +57,7 @@ describe('leaderboards', () => {
     expect((await anon.get('/api/leaderboards/ranked_rating')).status).toBe(400);
     expect((await anon.get('/api/leaderboards/solo_time')).status).toBe(400);
     expect((await anon.get('/api/leaderboards/solo_time?board=nope')).status).toBe(400);
-    const big = (await anon.get('/api/leaderboards/solo_time?board=classic-01&pageSize=5000')).body as LeaderboardPage;
+    const big = (await anon.get('/api/leaderboards/solo_time?board=classic-02&pageSize=5000')).body as LeaderboardPage;
     expect(big.pageSize).toBe(50);
   });
 

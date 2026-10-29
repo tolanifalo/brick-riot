@@ -2,7 +2,7 @@
  * Data-driven board definitions. The engine never hardcodes a level: every
  * board is a BoardDefinition that is validated and compiled into brick state.
  */
-import { POWER_UP_KINDS, type PowerUpKind } from '../config/powerups';
+import { isPowerDown, POWER_UP_KINDS, type PositivePowerUp, type PowerUpKind } from '../config/powerups';
 
 export const BRICK_TYPES = [
   'standard',
@@ -118,6 +118,18 @@ export interface BoardDefinition {
   stars?: StarThresholds;
   /** Chance (0..1) that a destroyed non-powerup brick drops a random power-up. Default 0. */
   dropChance?: number;
+  /**
+   * Positive kinds that random drops (and 'random' power-up bricks) choose
+   * from, weighted by `dropWeight`. Default LEGACY_DROP_POOL (the Phase 2
+   * six, so boards without this field keep their exact drops).
+   */
+  powerUpPool?: PositivePowerUp[];
+  /**
+   * Chance (0..1) that a random drop from an ordinary brick is a power-down
+   * instead. Power-up bricks never drop power-downs. Default 0 (no extra RNG
+   * roll, so existing boards are unchanged).
+   */
+  powerDownChance?: number;
   grid: BoardGrid;
   /** Maps single layout characters to brick specs. '.' is always empty. */
   legend: Record<string, BrickLegendEntry>;
@@ -161,6 +173,16 @@ export function validateBoard(board: BoardDefinition, options: ValidateOptions =
   if (board.dropChance !== undefined && !(board.dropChance >= 0 && board.dropChance <= 1)) {
     errors.push('dropChance must be between 0 and 1');
   }
+  if (board.powerDownChance !== undefined && !(board.powerDownChance >= 0 && board.powerDownChance <= 1)) {
+    errors.push('powerDownChance must be between 0 and 1');
+  }
+  if (board.powerUpPool !== undefined) {
+    if (board.powerUpPool.length === 0) errors.push('powerUpPool must not be empty');
+    for (const kind of board.powerUpPool) {
+      if (!POWER_UP_KINDS.includes(kind)) errors.push(`powerUpPool has unknown kind "${kind}"`);
+      else if (isPowerDown(kind)) errors.push(`powerUpPool may not contain the power-down "${kind}"`);
+    }
+  }
 
   for (const [key, entry] of Object.entries(board.legend)) {
     if (key.length !== 1 || key === '.') errors.push(`legend key "${key}" must be one character other than "."`);
@@ -180,6 +202,8 @@ export function validateBoard(board: BoardDefinition, options: ValidateOptions =
       if (entry.type !== 'powerup') errors.push(`legend "${key}" sets powerUp but is not a powerup brick`);
       else if (entry.powerUp !== 'random' && !POWER_UP_KINDS.includes(entry.powerUp)) {
         errors.push(`legend "${key}" has unknown powerUp "${entry.powerUp}"`);
+      } else if (entry.powerUp !== 'random' && isPowerDown(entry.powerUp)) {
+        errors.push(`legend "${key}": power-up bricks never drop power-downs ("${entry.powerUp}")`);
       }
     }
     if (entry.type === 'moving' && !entry.move) errors.push(`legend "${key}" is a moving brick without "move"`);

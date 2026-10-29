@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --project unit",
     "calibrate": "vitest run --project calibrate --silent=false scripts/calibrate.test.ts",
-    "compat": "vitest run --project calibrate --silent=false scripts/compatibility.test.ts"
+    "compat": "vitest run --project calibrate --silent=false scripts/compatibility.test.ts",
+    "calibrate:endless": "vitest run --project calibrate --silent=false scripts/endless.test.ts"
   }
 }

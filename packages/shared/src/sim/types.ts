@@ -104,6 +104,12 @@ export interface SimState {
   effects: EffectTimers;
   laserCooldown: number;
   powerUpsCollected: number;
+  /** Mini Paddle caught but waiting for a safe moment (no ball about to land) to shrink. */
+  miniActive: boolean;
+  /** Reversed: warning ticks left before left and right swap. */
+  invertDelay: number;
+  /** Power-downs caught (stats). */
+  powerDownsCollected: number;
   // ---- Phase 4: abilities (inert unless external commands arrive) ----
   /** Ability energy in tenths (0..config.energy.max * 10). */
   energy10: number;
@@ -178,7 +184,7 @@ export type SimEvent =
   | { type: 'paddle'; x: number; y: number; offset: number }
   | { type: 'brickHit'; brickId: number; x: number; y: number; destroyed: boolean; points: number; combo: number }
   | { type: 'brickDeflect'; brickId: number; x: number; y: number }
-  | { type: 'explosion'; brickId: number; x: number; y: number; radius: number; source: 'brick' | 'bomb' }
+  | { type: 'explosion'; brickId: number; x: number; y: number; radius: number; source: 'brick' | 'bomb' | 'nuke' }
   | { type: 'ballLost'; x: number; livesRemaining: number }
   | { type: 'ballDrained'; ballId: number; x: number }
   | { type: 'nudge'; ballId: number }
@@ -186,6 +192,9 @@ export type SimEvent =
   | { type: 'powerUp'; kind: PowerUpKind; x: number; y: number }
   | { type: 'pickupMissed'; pickupId: number }
   | { type: 'effectEnded'; kind: TimedPowerUp }
+  /** A delayed effect (Mini Paddle after its safe moment, Reversed after its warning) took hold. */
+  | { type: 'effectStarted'; kind: TimedPowerUp }
+  | { type: 'netSave'; ballId: number; x: number; y: number }
   | { type: 'multiball'; spawned: number }
   | { type: 'magnetCatch'; ballId: number }
   | { type: 'magnetRelease'; ballId: number }

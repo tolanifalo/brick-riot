@@ -36,7 +36,7 @@ async function registerViaUi(page: Page, name: string, email: string): Promise<v
   await expect(page.getByTestId('profile-screen')).toBeVisible();
 }
 
-/** Clears Opening Riot signed in (server-verified run) with the autopilot. */
+/** Clears level 1 (Kickoff) signed in (server-verified run) with the autopilot. */
 async function clearFirstBoard(page: Page): Promise<void> {
   await page.getByTestId('profile-back').click();
   await page.getByRole('button', { name: /PLAY SOLO/ }).click();
@@ -89,7 +89,7 @@ test('register, import guest progress (unverified), verify email, server-verifie
   await expect(page.getByTestId('import-result')).toContainText('9,999 coins');
   await expect(page.getByTestId('profile-coins')).toHaveText('0 C');
   await page.getByTestId('profile-tab-overview').click();
-  await expect(page.getByTestId('imported-records')).toContainText('Opening Riot');
+  await expect(page.getByTestId('imported-records')).toContainText('Kickoff');
 
   // Email verification through the emailed link (the app reports it and refreshes).
   await page.goto(await outboxLink(page, email, 'verify-email'));
@@ -108,7 +108,7 @@ test('register, import guest progress (unverified), verify email, server-verifie
   await page.reload();
   await page.getByTestId('menu-profile').click();
   await expect(page.getByTestId('profile-coins')).not.toHaveText('0 C');
-  await expect(page.getByTestId('records-table')).toContainText('Opening Riot');
+  await expect(page.getByTestId('records-table')).toContainText('Kickoff');
   await page.getByTestId('profile-tab-equipment').click();
   await expect(page.getByTestId('inventory-emp')).toContainText('EQUIPPED');
   await page.getByTestId('profile-back').click();

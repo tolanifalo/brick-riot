@@ -1,4 +1,5 @@
 import { levelForXp } from '../config/economy';
+import { getLevel, levelNumber } from '../levels/catalog';
 import type { BoardDefinition, UnlockRequirement } from '../levels/schema';
 import type { PlayerProgress } from './types';
 
@@ -43,7 +44,11 @@ export function describeRequirement(req: UnlockRequirement, boards: readonly Boa
     case 'boardCleared': {
       const index = boards.findIndex((b) => b.id === req.boardId);
       const board = boards[index];
-      return board ? `Clear ${index + 1}. ${board.name}` : `Clear ${req.boardId}`;
+      if (board) return `Clear ${index + 1}. ${board.name}`;
+      // Endless levels are generated rather than listed.
+      const n = levelNumber(req.boardId);
+      const level = getLevel(req.boardId);
+      return n !== null && level ? `Clear ${n}. ${level.name}` : `Clear ${req.boardId}`;
     }
     case 'playerLevel':
       return `Reach player level ${req.level}`;

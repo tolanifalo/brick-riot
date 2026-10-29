@@ -391,6 +391,10 @@ enum LeaderboardCategory {
   solo_score
   mastery
   casual_wins
+  /// Highest level number cleared (verified), across the hand-made and endless levels.
+  highest_level
+  /// Sum of best stars over every level (verified).
+  total_stars
 }
 
 /// One row per (category, board, season, player): the best verified value.

@@ -115,6 +115,10 @@ export interface BalanceConfig {
     capsuleHeight: number;
     /** Points for catching a capsule. */
     collectPoints: number;
+    /** Points for catching a power-down instead (a brave catch). */
+    powerDownBonus: number;
+    /** World Y of the Safety Net barrier (below the paddle). */
+    netY: number;
     /** Capsules allowed in flight at once; further drops are skipped. */
     maxPickups: number;
     /** Hard cap on simultaneous balls. */
@@ -197,6 +201,8 @@ export const BALANCE: BalanceConfig = {
     capsuleWidth: 32,
     capsuleHeight: 14,
     collectPoints: 25,
+    powerDownBonus: 250,
+    netY: 782,
     maxPickups: 6,
     maxBalls: 6,
     multiballSin: TRIG.sin25,
@@ -209,6 +215,13 @@ export const BALANCE: BalanceConfig = {
       magnet: { durationSeconds: 15, strength: 2.5, dropWeight: 16, cooldownSeconds: 0 },
       laser: { durationSeconds: 10, strength: 1, dropWeight: 14, cooldownSeconds: 0.3 },
       bomb: { durationSeconds: 12, strength: 1, dropWeight: 14, cooldownSeconds: 0 },
+      // Opt-in per board (`powerUpPool` / `powerDownChance`); boards that don't opt in never drop these.
+      net: { durationSeconds: 20, strength: 1, dropWeight: 12, cooldownSeconds: 0 },
+      nuke: { durationSeconds: 12, strength: 2, dropWeight: 4, cooldownSeconds: 0 },
+      // 88 x 0.7 = 61.6 u, just above the 60 u minimum paddle width.
+      mini: { durationSeconds: 8, strength: 0.7, dropWeight: 10, cooldownSeconds: 0 },
+      invert: { durationSeconds: 6, strength: 0.75, dropWeight: 8, cooldownSeconds: 0 },
+      fast: { durationSeconds: 8, strength: 1.35, dropWeight: 10, cooldownSeconds: 0 },
     },
   },
 };

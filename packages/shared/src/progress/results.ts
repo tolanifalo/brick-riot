@@ -1,4 +1,5 @@
 import { ECONOMY, levelForXp, type EconomyConfig, type Reward } from '../config/economy';
+import { nextLevel } from '../levels/catalog';
 import type { BoardDefinition, MasteryObjective } from '../levels/schema';
 import type { RunSummary } from '../sim/replay';
 import { createEmptyBoardProgress } from './save';
@@ -105,10 +106,13 @@ export function repeatMultiplier(priorCompletions: number, economy: EconomyConfi
 export function applyRunResult(
   progress: PlayerProgress,
   board: BoardDefinition,
-  boards: readonly BoardDefinition[],
+  knownBoards: readonly BoardDefinition[],
   result: RunResult,
   economy: EconomyConfig = ECONOMY,
 ): { progress: PlayerProgress; outcome: RunOutcome } {
+  // The next level (endless levels are generated, so never in a fixed list) can unlock too.
+  const following = nextLevel(board.id);
+  const boards = following && !knownBoards.some((b) => b.id === following.id) ? [...knownBoards, following] : knownBoards;
   const { summary } = result;
   const prevBoard = progress.boards[board.id] ?? createEmptyBoardProgress(board.id);
   const levelBefore = levelForXp(progress.xp).level;

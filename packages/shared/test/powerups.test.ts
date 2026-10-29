@@ -318,7 +318,7 @@ describe('life loss resets power-ups', () => {
     ball.vy = 430;
     stepN(sim, 3, { targetX: 400, axis: 0, launch: false });
     expect(sim.state.status).toBe('ready');
-    expect(sim.state.effects).toEqual({ wide: 0, heavy: 0, magnet: 0, laser: 0, bomb: 0 });
+    expect(Object.values(sim.state.effects).every((t) => t === 0)).toBe(true);
     expect(sim.state.pickups).toHaveLength(0);
     expect(sim.state.lasers).toHaveLength(0);
     expect(sim.state.paddle.width).toBe(BALANCE.paddle.width);

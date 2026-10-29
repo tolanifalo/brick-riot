@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SIM } from '../src/config/balance';
-import { CLASSIC_01 } from '../src/levels/classic';
+import { OPENING_RIOT_V1 as CLASSIC_01 } from '../src/levels/legacy';
 import { replayRun } from '../src/sim/replay';
 import { Simulation } from '../src/sim/simulation';
 import type { TickInput } from '../src/sim/types';

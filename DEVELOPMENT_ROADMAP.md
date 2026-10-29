@@ -119,6 +119,13 @@ Not done in Phase 5:
 - Display names are not unique and not moderated. Deleted accounts' names remain in
   opponents' match history.
 
+## 0.6 (in progress): fun first, then forever
+1. ✅ Power-ups (Safety Net, Nuke) and power-downs (Mini Paddle, Reversed, Fast Ball).
+2. ✅ A short, fun level 1 (Kickoff).
+3. ✅ Endless generated levels, chapters, TOP LEVEL and STARS leaderboards.
+4. Power-downs in races: race boards opt in, re-measure compatibility.
+5. Polish: capsule art, sounds, a real level map, docs, the full multiplayer e2e run.
+
 ## Phase 6: Competitive systems
 - Human BDR calibration from the stored match and run telemetry
   (`/api/telemetry/boards`).

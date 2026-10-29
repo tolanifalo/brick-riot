@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.6.0 (in progress): power-ups, power-downs, a fun level 1, endless levels
+
+Plan: (1) new power-ups and power-downs, (2) a short level 1 and onboarding,
+(3) endless generated levels, (4) power-downs in races, (5) polish.
+
+### Stage 1: power-ups and power-downs (done)
+- New power-ups: **Safety Net** (one save) and **Nuke** (5×5 blast; steel survives).
+- New power-downs: **Mini Paddle** (×0.7, waits for a safe moment, cancels with Wide),
+  **Reversed** (0.75 s warning, then mirrored controls, implemented inside the
+  simulation so replays and race prediction stay exact) and **Fast Ball** (×1.35).
+  Catching one pays a +250 "brave catch" bonus.
+- Boards opt in with `powerUpPool` and `powerDownChance`. Boards that don't opt in keep
+  their exact drop stream: every existing replay, calibration and multiplayer
+  measurement is unchanged (tested). Power-up bricks can never drop power-downs.
+- Power-up bricks show their letter (or "?"). Power-downs have hazard-striped capsules
+  and HUD chips. Added a net line, a Nuke ring and blast, Fast Ball glow and Reversed
+  warnings.
+- The test bot ignores power-down capsules and mirrors its aim while Reversed.
+- Found by the new tests: Mini Paddle at ×0.65 was clamped to the 60-unit minimum width,
+  so it is now ×0.7.
+
+### Stage 2: level 1 (started)
+- Level 1 is now **Kickoff** (`classic-01` v2): one-hit bricks, two explosives, visible
+  Multiball, Laser and Wide bricks, 12% drops, no power-downs. Bot median clear is 51 s,
+  against about 256 s for Opening Riot.
+- Opening Riot v1 is kept, frozen, as the golden replay fixture (`levels/legacy.ts`).
+  Same id, so saves and unlocks carry over. **Known:** server records and leaderboards
+  are keyed by board id, not version, so Opening Riot times would sit next to Kickoff
+  times. Only development test data exists; separating them is part of the stage 3
+  leaderboard work.
+- `onboarding.test.ts` guards level 1: at least three visible power-ups, no power-downs,
+  bot clears under 90 s.
+
+### Stage 3: endless levels (done)
+- **Levels 13 to 9999 are generated** (`levels/endless.ts`) from the level number alone:
+  the same level N for everyone, and the server rebuilds it to verify runs. Integer RNG
+  only (no `Math.exp`/`log`), so every JS engine builds identical boards.
+  - Mirror-symmetric pattern templates (pyramid, diamond, frame, zigzag, checker, …)
+    and a palette per chapter.
+  - Armour, explosives, steel (from level 18), sliding lanes (26), moving steel gates
+    (40) and power-downs (16, rising to 30%) arrive gradually.
+  - Sawtooth difficulty: rating 4 rising towards 9, HARD every 10th level, a BOSS every
+    50th, breathers after them.
+  - 1–3 visible power-up bricks per level; the drop pool grows (Heavy from 15, Magnet
+    18, Nuke 22).
+  - Names are unique within a chapter.
+- **Level catalog** (`levels/catalog.ts`): `getLevel`, `levelNumber`, `nextLevel`,
+  chapters (12 hand-made, then 20 per chapter), `unlockCandidates`. Clearing level N
+  unlocks N+1 on the client and the server.
+- **Level select by chapter**: ◀ CHAPTER N ▶, HARD/BOSS tags, a power-down notice,
+  highest level and total stars. You can look one chapter past your progress.
+- **Leaderboards**: new TOP LEVEL and STARS boards (migration
+  `20261029000000_endless_leaderboards`). Per-level boards accept any level through a
+  level-number picker.
+  - Records are now kept **per board version** (`recordKey`): version 1 keeps the plain
+    id, so old records stay valid, and Opening Riot times no longer appear on Kickoff.
+    This fixes the stage 2 known issue.
+- Verified: every level 13–3000 passes board validation. The bot beat all 30 calibration
+  levels (13–300, 5 seeds each) and a test sample up to level 9999. A frozen fingerprint
+  test forces a generator version bump on any change.
+- Star targets come from a fitted estimate (18 s + 1 s per hit point + 8 s per steel
+  cell + 10 s per lane). Bot clear times vary 2–3× by layout, so stars on generated
+  levels are approximate. Refit with `npm run calibrate:endless`.
+- Known: personal records (`solo_board_progress`) are still keyed by board id only, so a
+  player's old Opening Riot best score can sit on their Kickoff card. This affects
+  development data only.
+
 ## 0.5.0 (2026-10-29): Phase 5 accounts, server progression, Quick Match
 
 *These entries were written at the end of the phase. The work was interrupted once by an

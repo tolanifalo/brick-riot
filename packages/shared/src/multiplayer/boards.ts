@@ -119,7 +119,7 @@ interface ProfileSpec {
  * Human playtesting must replace these before any ranked use.
  */
 const SPECS: Record<string, ProfileSpec> = {
-  'classic-01': { eligible: false, note: 'Median clear (~256 s) far exceeds the 120 s match timer.', stats: null, deciles: null, withinTimer: null },
+  'classic-01': { eligible: false, note: 'Tutorial board (Kickoff v2); not reviewed for multiplayer.', stats: null, deciles: null, withinTimer: null },
   'classic-02': {
     eligible: true,
     note: 'Symmetric; moderate variance.',

@@ -1,4 +1,4 @@
-import { CAMPAIGN_BOARDS, type RunOutcome } from '@brick-riot/shared';
+import { getLevel, levelNumber, type BoardDefinition, type RunOutcome } from '@brick-riot/shared';
 import { useEffect, useRef, useState } from 'react';
 import { GameBridge } from '../game/bridge';
 import { createSoloGame } from '../game/createGame';
@@ -14,8 +14,8 @@ export function SoloScreen() {
   const setScreen = useApp((s) => s.setScreen);
   // Re-evaluate when progress (or the signed-in profile) changes.
   useProgress((s) => s.progress);
-  const index = CAMPAIGN_BOARDS.findIndex((b) => b.id === boardId);
-  const board = CAMPAIGN_BOARDS[index];
+  const board = boardId ? getLevel(boardId) : undefined;
+  const level = board ? (levelNumber(board.id) ?? 1) : 1;
   // Defence in depth: even if state were tampered with, a locked board never mounts.
   const allowed = !!board && canStartBoard(board.id);
 
@@ -25,11 +25,10 @@ export function SoloScreen() {
 
   if (!board || !allowed) return null;
   // Remount the game when the board changes (e.g. "Next level").
-  return <SoloGame key={board.id} boardIndex={index} />;
+  return <SoloGame key={board.id} board={board} level={level} />;
 }
 
-function SoloGame({ boardIndex }: { boardIndex: number }) {
-  const board = CAMPAIGN_BOARDS[boardIndex];
+function SoloGame({ board, level }: { board: BoardDefinition; level: number }) {
   const surfaceRef = useRef<HTMLElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [bridge] = useState(() => new GameBridge());
@@ -78,7 +77,7 @@ function SoloGame({ boardIndex }: { boardIndex: number }) {
       parent,
       inputSurface: surface,
       board,
-      levelNumber: boardIndex + 1,
+      levelNumber: level,
       bridge,
       upgrades,
       reducedEffects: settings.reducedEffects,
@@ -90,7 +89,7 @@ function SoloGame({ boardIndex }: { boardIndex: number }) {
       game.destroy(true);
       useHud.setState({ ...INITIAL_HUD });
     };
-  }, [bridge, board, boardIndex, ticketReady, signedIn]);
+  }, [bridge, board, level, ticketReady, signedIn]);
 
   if (!board) return null;
   return (
@@ -103,7 +102,7 @@ function SoloGame({ boardIndex }: { boardIndex: number }) {
           <ComboBadge />
           <StatusOverlay
             bridge={bridge}
-            boardIndex={boardIndex}
+            level={level}
             record={record}
             onExit={() => setScreen('campaign')}
           />

@@ -788,6 +788,56 @@ button {
   font-size: 13px;
 }
 
+/* Chapters (0.6): 12 hand-made levels, then 20 generated levels per chapter. */
+.chapter-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 6px;
+  border: 2px solid var(--line, #2a3052);
+  background: rgb(10 13 28 / 0.6);
+}
+
+.chapter-title {
+  font-family: var(--display);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
+.chapter-arrow {
+  min-width: 44px;
+  min-height: 40px;
+  padding: 4px 10px;
+}
+
+.lb-level {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.lb-level .field { width: 110px; margin: 0; }
+.lb-level-name { flex: 1; min-width: 120px; padding-bottom: 10px; font-family: var(--display); font-size: 13px; }
+
+.level-tag.hard { background: var(--orange, #ff8a1c); color: var(--ink); }
+.level-tag.boss { background: var(--pink); color: var(--ink); }
+.level-card.tag-boss.unlocked { border-color: var(--pink); }
+.detail-head h2 .level-tag { margin-left: 8px; vertical-align: middle; font-size: 11px; }
+
+.detail-hazard {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text);
+  background: repeating-linear-gradient(-45deg, rgb(10 13 28 / 0.9) 0 6px, rgb(70 12 24 / 0.9) 6px 12px);
+  border: 2px solid var(--red, #ff4d6d);
+}
+
 .campaign-body {
   display: flex;
   flex-direction: column;
@@ -1084,6 +1134,18 @@ button {
   transition: transform 100ms linear;
 }
 
+/* Power-downs: hazard-striped chip, matching their capsules. */
+.effect-chip.negative {
+  background: repeating-linear-gradient(-45deg, rgb(10 13 28 / 0.9) 0 6px, rgb(70 12 24 / 0.9) 6px 12px);
+}
+
+.effect-chip.negative .chip-glyph {
+  background: var(--ink);
+  color: var(--c);
+  outline: 2px solid var(--c);
+  outline-offset: -2px;
+}
+
 .result-stars {
   display: flex;
   justify-content: center;
@@ -1197,5 +1259,15 @@ button {
 .panel.loss .panel-actions .btn { min-height: 44px; font-size: 14px; padding: 8px 10px; }
 .panel-actions [data-testid='next-level'] { grid-column: 1 / -1; }
 .rewards { margin-bottom: 12px; }
-.reward-lines { font-size: 11px; gap: 2px; }
+/* A big first clear can list 10+ rewards: the list scrolls so the actions never leave the screen. */
+.reward-lines {
+  font-size: 11px;
+  gap: 2px;
+  max-height: min(24vh, 132px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
 .reward-total { font-size: 16px; }

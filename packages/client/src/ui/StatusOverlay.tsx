@@ -1,4 +1,4 @@
-import { CAMPAIGN_BOARDS, isBoardUnlocked, type RunOutcome } from '@brick-riot/shared';
+import { getLevel, getLevelAt, isBoardUnlocked, levelNumber, type RunOutcome } from '@brick-riot/shared';
 import type { ReactNode } from 'react';
 import type { GameBridge } from '../game/bridge';
 import { useProgress } from '../progress/progressStore';
@@ -10,7 +10,8 @@ export type RunRecordState = { status: 'idle' } | { status: 'saving' } | { statu
 
 interface Props {
   bridge: GameBridge;
-  boardIndex: number;
+  /** 1-based level number of the board being played. */
+  level: number;
   record: RunRecordState;
   onExit(): void;
 }
@@ -69,19 +70,16 @@ function Rewards({ outcome }: { outcome: RunOutcome }) {
           LEVEL UP · {outcome.levelAfter}
         </p>
       )}
-      {outcome.unlocked.map((id) => {
-        const i = CAMPAIGN_BOARDS.findIndex((b) => b.id === id);
-        return (
-          <p key={id} className="callout unlock" data-testid="unlock-notice">
-            UNLOCKED · {i + 1}. {CAMPAIGN_BOARDS[i]?.name}
-          </p>
-        );
-      })}
+      {outcome.unlocked.map((id) => (
+        <p key={id} className="callout unlock" data-testid="unlock-notice">
+          UNLOCKED · {levelNumber(id)}. {getLevel(id)?.name}
+        </p>
+      ))}
     </div>
   );
 }
 
-export function StatusOverlay({ bridge, boardIndex, record, onExit }: Props) {
+export function StatusOverlay({ bridge, level, record, onExit }: Props) {
   const phase = useHud((s) => s.phase);
   const paused = useHud((s) => s.paused);
   const score = useHud((s) => s.score);
@@ -124,7 +122,7 @@ export function StatusOverlay({ bridge, boardIndex, record, onExit }: Props) {
   if (phase === 'won' || phase === 'lost') {
     const won = phase === 'won';
     const outcome = record.status === 'done' ? record.outcome : null;
-    const next = CAMPAIGN_BOARDS[boardIndex + 1];
+    const next = getLevelAt(level + 1);
     const nextOpen = won && !!next && isBoardUnlocked(next, progress);
     return (
       <Panel title={won ? 'BOARD CLEAR' : 'OUT OF BALLS'} tone={won ? 'win' : 'loss'}>

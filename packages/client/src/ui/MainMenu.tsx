@@ -54,7 +54,7 @@ export function MainMenu() {
       <nav className="menu-list" aria-label="Main menu">
         <button type="button" className="menu-btn primary" onClick={() => setScreen('campaign')} autoFocus>
           <span>PLAY SOLO</span>
-          <span className="menu-btn-note">Classic campaign · 12 boards</span>
+          <span className="menu-btn-note">12 classic levels, then endless</span>
         </button>
         <button type="button" className="menu-btn mp" onClick={() => setScreen('quickmatch')} disabled={!accounts} data-testid="menu-quickmatch">
           <span>QUICK MATCH</span>

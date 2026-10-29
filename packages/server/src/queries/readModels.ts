@@ -1,5 +1,6 @@
 import {
-  getMatchBoard,
+  getLevel,
+  recordKey,
   type LeaderboardCategoryId,
   type LeaderboardPage,
   type LeaderboardRow,
@@ -11,7 +12,7 @@ import { ApiError } from '../http/errors';
 import { PRESEASON } from '../progression/provision';
 import type { MatchRecord } from '../persistence/matchResults';
 
-const CATEGORIES: readonly LeaderboardCategoryId[] = ['solo_time', 'solo_score', 'mastery', 'casual_wins'];
+const CATEGORIES: readonly LeaderboardCategoryId[] = ['solo_time', 'solo_score', 'mastery', 'casual_wins', 'highest_level', 'total_stars'];
 const PER_BOARD: readonly LeaderboardCategoryId[] = ['solo_time', 'solo_score'];
 
 /** Read-only queries for leaderboards, match history and balance telemetry. */
@@ -33,9 +34,13 @@ export class ReadModels {
     if (typeof rawCategory !== 'string' || !(CATEGORIES as readonly string[]).includes(rawCategory)) throw new ApiError(400, 'unknown_category');
     const category = rawCategory as LeaderboardCategoryId;
     let boardId = '*';
+    let publicBoardId: string | null = null;
     if (PER_BOARD.includes(category)) {
-      if (typeof rawBoardId !== 'string' || !getMatchBoard(rawBoardId)) throw new ApiError(400, 'unknown_board');
-      boardId = rawBoardId;
+      // Any solo level (hand-made or endless), current version only.
+      const board = typeof rawBoardId === 'string' ? getLevel(rawBoardId) : undefined;
+      if (!board) throw new ApiError(400, 'unknown_board');
+      boardId = recordKey(board);
+      publicBoardId = board.id;
     }
     const page = clampInt(rawPage, 1, 1, 10_000);
     const pageSize = clampInt(rawPageSize, 20, 1, 50);
@@ -76,7 +81,7 @@ export class ReadModels {
     }
     return {
       category,
-      boardId: boardId === '*' ? null : boardId,
+      boardId: publicBoardId,
       seasonId: PRESEASON,
       rows: rows.map((r, i) => toRow(r, (page - 1) * pageSize + i + 1)),
       page,

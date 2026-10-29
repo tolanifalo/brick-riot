@@ -1,5 +1,6 @@
 import {
   ABILITY_DEFINITIONS,
+  getLevel,
   getMatchBoard,
   UPGRADE_IDS,
   UPGRADES,
@@ -16,7 +17,8 @@ import { useApp } from '../../state/appStore';
 
 type Tab = 'overview' | 'equipment' | 'history' | 'account';
 
-const boardName = (id: string) => getMatchBoard(id)?.name ?? id;
+/** Solo levels (hand-made or endless) first, then multiplayer variants. */
+const boardName = (id: string) => getLevel(id)?.name ?? getMatchBoard(id)?.name ?? id;
 const seconds = (ticks: number | null) => (ticks === null ? '—' : `${(ticks / 120).toFixed(1)}s`);
 
 export function ProfileScreen() {

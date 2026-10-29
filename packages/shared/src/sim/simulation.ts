@@ -1,5 +1,5 @@
 import { BALANCE, SIM, type BalanceConfig } from '../config/balance';
-import { POWER_UP_KINDS, TIMED_POWER_UPS, type PowerUpKind, type TimedPowerUp } from '../config/powerups';
+import { isPowerDown, LEGACY_DROP_POOL, POWER_DOWN_KINDS, TIMED_POWER_UPS, type PowerUpKind, type TimedPowerUp } from '../config/powerups';
 import { compileBoard, gridPitch, type BoardDefinition } from '../levels/schema';
 import { nextRandom, normalizeSeed } from '../math/rng';
 import { clearBonus, destroyScore } from './scoring';
@@ -15,7 +15,7 @@ interface PendingExplosion {
   x: number;
   y: number;
   radius: number;
-  source: 'brick' | 'bomb';
+  source: 'brick' | 'bomb' | 'nuke';
 }
 
 /** Salt that derives the drop RNG stream from the run seed. */
@@ -26,7 +26,7 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function emptyEffects(): EffectTimers {
-  return { wide: 0, heavy: 0, magnet: 0, laser: 0, bomb: 0 };
+  return { wide: 0, heavy: 0, magnet: 0, laser: 0, bomb: 0, net: 0, nuke: 0, mini: 0, invert: 0, fast: 0 };
 }
 
 export function createInitialState(board: BoardDefinition, seed: number, config: BalanceConfig): SimState {
@@ -77,6 +77,9 @@ export function createInitialState(board: BoardDefinition, seed: number, config:
     effects: emptyEffects(),
     laserCooldown: 0,
     powerUpsCollected: 0,
+    miniActive: false,
+    invertDelay: 0,
+    powerDownsCollected: 0,
     energy10: Math.round(Math.min(config.energy.max, Math.max(0, config.energy.start)) * 10),
     cooldowns: { emp: 0, shrink: 0, frost: 0, shield: 0, cleanse: 0 },
     shieldUntil: 0,
@@ -153,6 +156,10 @@ export class Simulation {
     if (input.ext && input.ext.length > 0) this.applyExternal(input.ext);
     if (s.debuff) this.updateDebuff();
     this.moveBricks();
+    if (s.effects.mini > 0 && !s.miniActive && this.paddleZoneSafe()) {
+      s.miniActive = true;
+      this.emit({ type: 'effectStarted', kind: 'mini' });
+    }
     this.applyPaddleWidth();
     this.movePaddle(input);
 
@@ -204,10 +211,18 @@ export class Simulation {
     return d !== null && d.kind === 'emp' && d.phase === 'active';
   }
 
+  /** True while Reversed is in effect (after its warning). */
+  get inverted(): boolean {
+    return this.state.effects.invert > 0 && this.state.invertDelay === 0;
+  }
+
   private applyPaddleWidth(): void {
     const p = this.state.paddle;
     const base = this.config.paddle.width;
     let width = this.state.effects.wide > 0 && !this.jammed ? base * this.config.powerUps.definitions.wide.strength : base;
+    if (this.state.miniActive) {
+      width = Math.max(this.config.sabotage.minPaddleWidth, width * this.config.powerUps.definitions.mini.strength);
+    }
     const d = this.state.debuff;
     if (d && d.kind === 'shrink' && d.phase === 'active') {
       width = Math.max(this.config.sabotage.minPaddleWidth, width * d.factor);
@@ -223,13 +238,17 @@ export class Simulation {
   private movePaddle(input: TickInput): void {
     const p = this.state.paddle;
     const half = p.width / 2;
+    // Reversed lives in the simulation (not the input layer), so replays and
+    // multiplayer prediction mirror exactly the same ticks.
+    const inverted = this.inverted;
     let next: number;
     if (input.targetX !== null && Number.isFinite(input.targetX)) {
+      const target = inverted ? SIM.worldWidth - input.targetX : input.targetX;
       const maxDelta = this.config.paddle.pointerMaxSpeed * SIM.dt;
-      next = p.x + clamp(input.targetX - p.x, -maxDelta, maxDelta);
+      next = p.x + clamp(target - p.x, -maxDelta, maxDelta);
     } else {
       const axis = Number.isFinite(input.axis) ? clamp(input.axis, -1, 1) : 0;
-      next = p.x + axis * this.config.paddle.keyboardSpeed * SIM.dt;
+      next = p.x + (inverted ? -axis : axis) * this.config.paddle.keyboardSpeed * SIM.dt;
     }
     next = clamp(next, half, SIM.worldWidth - half);
     p.vx = (next - p.x) / SIM.dt;
@@ -309,6 +328,7 @@ export class Simulation {
       this.collideWalls(ball);
       this.collidePaddle(ball);
       if (ball.attached) return;
+      if (this.state.effects.net > 0) this.collideNet(ball);
       this.collideBricks(ball);
       this.processExplosions();
       if (this.state.requiredRemaining === 0) {
@@ -376,6 +396,19 @@ export class Simulation {
     setDirection(ball, offset * this.config.rebound.maxTan, -1);
     ball.y = top - r;
     this.emit({ type: 'paddle', x: ball.x, y: top, offset });
+  }
+
+  /** Safety Net: bounces the first ball that falls onto it, then breaks. */
+  private collideNet(ball: BallState): void {
+    const netY = this.config.powerUps.netY;
+    if (ball.vy <= 0 || ball.y + ball.radius < netY) return;
+    ball.y = netY - ball.radius;
+    ball.vy = -ball.vy;
+    this.enforceMinVertical(ball);
+    this.state.effects.net = 0;
+    this.state.combo = 0;
+    this.emit({ type: 'netSave', ballId: ball.id, x: ball.x, y: netY });
+    this.emit({ type: 'effectEnded', kind: 'net' });
   }
 
   private collideBricks(ball: BallState): void {
@@ -472,8 +505,21 @@ export class Simulation {
     this.maybeDrop(brick, x, y);
   }
 
+  /** An armed Nuke goes off first; an armed Bomb then waits for the next contact. */
   private detonateBomb(brick: BrickState): void {
     const s = this.state;
+    if (s.effects.nuke > 0) {
+      s.effects.nuke = 0;
+      this.explosionQueue.push({
+        brickId: brick.id,
+        x: brick.x + brick.width / 2,
+        y: brick.y + brick.height / 2,
+        radius: this.config.powerUps.definitions.nuke.strength,
+        source: 'nuke',
+      });
+      this.emit({ type: 'effectEnded', kind: 'nuke' });
+      return;
+    }
     if (s.effects.bomb <= 0) return;
     s.effects.bomb = 0;
     this.explosionQueue.push({
@@ -512,7 +558,13 @@ export class Simulation {
   private bumpSpeed(ball: BallState): void {
     const { baseSpeed, maxSpeed, speedPerHit } = this.config.ball;
     this.state.speedHits++;
-    setSpeed(ball, Math.min(maxSpeed, baseSpeed + this.state.speedHits * speedPerHit));
+    const nominal = Math.min(maxSpeed, baseSpeed + this.state.speedHits * speedPerHit);
+    setSpeed(ball, this.state.effects.fast > 0 ? nominal * this.config.powerUps.definitions.fast.strength : nominal);
+  }
+
+  /** Fast Ball switching on (factor) or off (1 / factor) rescales every ball. */
+  private scaleBallSpeeds(factor: number): void {
+    for (const ball of this.state.balls) setSpeed(ball, ball.speed * factor);
   }
 
   /**
@@ -562,18 +614,35 @@ export class Simulation {
 
   // ---- Power-ups -------------------------------------------------------------
 
-  private rollPowerUp(): PowerUpKind {
+  /** Weighted pick from `pool` (in pool order) on the drop stream. */
+  private rollFrom(pool: readonly PowerUpKind[]): PowerUpKind {
     const defs = this.config.powerUps.definitions;
     let total = 0;
-    for (const kind of POWER_UP_KINDS) total += defs[kind].dropWeight;
+    for (const kind of pool) total += defs[kind].dropWeight;
     const roll = nextRandom(this.state.dropRngState);
     this.state.dropRngState = roll.state;
     let pick = roll.value * total;
-    for (const kind of POWER_UP_KINDS) {
+    for (const kind of pool) {
       pick -= defs[kind].dropWeight;
       if (pick < 0) return kind;
     }
-    return POWER_UP_KINDS[POWER_UP_KINDS.length - 1] ?? 'multiball';
+    return pool[pool.length - 1] ?? 'multiball';
+  }
+
+  private rollPowerUp(): PowerUpKind {
+    return this.rollFrom(this.board.powerUpPool ?? LEGACY_DROP_POOL);
+  }
+
+  /** A random drop from an ordinary brick: sometimes a power-down, if the board allows them. */
+  private rollRandomDrop(): PowerUpKind {
+    const chance = this.board.powerDownChance ?? 0;
+    // No extra roll when the board has no power-downs: older boards keep their exact drop stream.
+    if (chance > 0) {
+      const roll = nextRandom(this.state.dropRngState);
+      this.state.dropRngState = roll.state;
+      if (roll.value < chance) return this.rollFrom(POWER_DOWN_KINDS);
+    }
+    return this.rollPowerUp();
   }
 
   private maybeDrop(brick: BrickState, x: number, y: number): void {
@@ -584,7 +653,7 @@ export class Simulation {
     } else if ((this.board.dropChance ?? 0) > 0) {
       const roll = nextRandom(s.dropRngState);
       s.dropRngState = roll.state;
-      if (roll.value < (this.board.dropChance ?? 0)) kind = this.rollPowerUp();
+      if (roll.value < (this.board.dropChance ?? 0)) kind = this.rollRandomDrop();
     }
     if (!kind || s.pickups.length >= this.config.powerUps.maxPickups) return;
     const id = s.nextEntityId++;
@@ -608,8 +677,14 @@ export class Simulation {
       const overlapsY = pickup.y + cfg.capsuleHeight / 2 >= top && pickup.y - cfg.capsuleHeight / 2 <= bottom;
       if (overlapsX && overlapsY) {
         s.pickups.splice(i, 1);
-        s.score += cfg.collectPoints;
-        s.powerUpsCollected++;
+        if (isPowerDown(pickup.kind)) {
+          // A brave catch: power-downs pay a bonus.
+          s.score += cfg.powerDownBonus;
+          s.powerDownsCollected++;
+        } else {
+          s.score += cfg.collectPoints;
+          s.powerUpsCollected++;
+        }
         this.emit({ type: 'powerUp', kind: pickup.kind, x: pickup.x, y: top });
         this.applyPowerUp(pickup.kind);
         continue;
@@ -624,13 +699,31 @@ export class Simulation {
   }
 
   private applyPowerUp(kind: PowerUpKind): void {
+    const s = this.state;
     const def = this.config.powerUps.definitions[kind];
     if (kind === 'multiball') {
       this.spawnMultiball(def.strength);
       return;
     }
+    // Opposites cancel: Wide and Mini Paddle return the paddle to normal.
+    const opposite = kind === 'wide' ? 'mini' : kind === 'mini' ? 'wide' : null;
+    if (opposite && s.effects[opposite] > 0) {
+      this.endEffect(opposite);
+      return;
+    }
+    const fresh = s.effects[kind] === 0;
     // Timed effects refresh to full duration; they never stack beyond it.
-    this.state.effects[kind] = Math.max(1, Math.round(def.durationSeconds * SIM.tickRate));
+    s.effects[kind] = Math.max(1, Math.round(def.durationSeconds * SIM.tickRate));
+    if (!fresh) return;
+    if (kind === 'fast') this.scaleBallSpeeds(def.strength);
+    if (kind === 'invert') s.invertDelay = Math.round(def.strength * SIM.tickRate);
+  }
+
+  /** Ends a timed effect now (expiry, cancellation or use). */
+  private endEffect(kind: TimedPowerUp): void {
+    const s = this.state;
+    s.effects[kind] = 0;
+    this.expireEffect(kind);
   }
 
   private spawnMultiball(count: number): void {
@@ -711,21 +804,34 @@ export class Simulation {
       if (s.effects[kind] <= 0) continue;
       // EMP suspends paddle power-ups; their timers pause rather than run down.
       if (jammed && (kind === 'wide' || kind === 'magnet' || kind === 'laser')) continue;
+      // Delayed power-downs only run down once they have taken hold.
+      if (kind === 'mini' && !s.miniActive) continue;
+      if (kind === 'invert' && s.invertDelay > 0) {
+        s.invertDelay--;
+        if (s.invertDelay === 0) this.emit({ type: 'effectStarted', kind: 'invert' });
+        continue;
+      }
       s.effects[kind]--;
       if (s.effects[kind] === 0) this.expireEffect(kind);
     }
   }
 
   private expireEffect(kind: TimedPowerUp): void {
+    const s = this.state;
     this.emit({ type: 'effectEnded', kind });
     if (kind === 'magnet') {
-      for (const ball of this.state.balls) if (ball.attached) this.releaseBall(ball);
+      for (const ball of s.balls) if (ball.attached) this.releaseBall(ball);
     }
+    if (kind === 'mini') s.miniActive = false;
+    if (kind === 'invert') s.invertDelay = 0;
+    if (kind === 'fast') this.scaleBallSpeeds(1 / this.config.powerUps.definitions.fast.strength);
   }
 
   private clearPowerUps(): void {
     const s = this.state;
     s.effects = emptyEffects();
+    s.miniActive = false;
+    s.invertDelay = 0;
     s.pickups = [];
     s.lasers = [];
     s.laserCooldown = 0;

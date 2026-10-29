@@ -100,7 +100,7 @@ export function EffectChips() {
       {effects.map(({ kind, fraction }) => {
         const info = POWER_UP_INFO[kind];
         return (
-          <li key={kind} className={`effect-chip c-${info.color}`} title={info.activation}>
+          <li key={kind} className={`effect-chip c-${info.color}${info.negative ? ' negative' : ''}`} title={info.activation}>
             <span className="chip-glyph">{info.glyph}</span>
             <span className="chip-label">{info.label}</span>
             <span className="chip-bar" style={{ transform: `scaleX(${fraction})` }} />

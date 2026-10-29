@@ -72,7 +72,7 @@ function QuickSearch() {
           <h2 className="mp-subtitle">YOUR BOARDS (UP TO 3, IN ORDER)</h2>
           {playable.length === 0 ? (
             <p className="mp-small" data-testid="quick-no-boards">
-              Clear Opening Riot in the campaign (signed in) to unlock your first multiplayer board.
+              Clear level 1 (Kickoff) in the campaign (signed in) to unlock your first multiplayer board.
             </p>
           ) : (
             <ul className="mp-board-grid">

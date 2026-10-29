@@ -5,7 +5,7 @@ import {
   createEmptyBoardProgress,
   createEmptyProgress,
   encodeInputLog,
-  getCampaignBoard,
+  getLevel,
   type BoardDefinition,
   type FinishRunResponse,
   type ProfileView,
@@ -120,7 +120,7 @@ export const useProgress = create<ProgressState>((set, get) => ({
   },
 
   async recordRun(run) {
-    const board = getCampaignBoard(run.summary.boardId);
+    const board = getLevel(run.summary.boardId);
     if (!board) return null;
     if (get().mode === 'account') return recordServerRun(run, board);
     // Local integrity check: the input log must replay to the reported result.
@@ -215,7 +215,7 @@ async function commit(progress: PlayerProgress): Promise<void> {
 
 /** The only way a board can be started: locked boards are refused. */
 export function canStartBoard(boardId: string): boolean {
-  const board = getCampaignBoard(boardId);
+  const board = getLevel(boardId);
   const { mode, server, progress } = useProgress.getState();
   if (!board) return false;
   if (mode === 'account' && server) return server.unlockedBoardIds.includes(boardId);
