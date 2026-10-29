@@ -1,0 +1,40 @@
+{
+  "name": "brick-riot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @brick-riot/client",
+    "dev:server": "npm run dev -w @brick-riot/server",
+    "start:server": "npm run start -w @brick-riot/server",
+    "db:start": "npm run db:start -w @brick-riot/server",
+    "db:generate": "npm run db:generate -w @brick-riot/server",
+    "db:migrate": "npm run db:migrate -w @brick-riot/server",
+    "db:seed": "npm run db:seed -w @brick-riot/server",
+    "build": "npm run typecheck && npm run build -w @brick-riot/client",
+    "preview": "npm run preview -w @brick-riot/client",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "e2e": "npm run e2e -w @brick-riot/client",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build -w @brick-riot/client"
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.0",
+    "vitest": "^5.0.5"
+  }
+}

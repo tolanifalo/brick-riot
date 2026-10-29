@@ -1,0 +1,27 @@
+node_modules/
+dist/
+dist-e2e/
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Secrets and local overrides (never commit)
+.env
+.env.*
+!.env.example
+# Non-secret build mode used by the browser tests
+!packages/client/.env.e2e
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+pgdata/
+.pgdata/
+
+# Generated Prisma client (run `npm run db:generate`)
+packages/server/src/generated/
+
+.DS_Store
+Thumbs.db

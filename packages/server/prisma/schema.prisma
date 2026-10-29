@@ -1,0 +1,439 @@
+// BRICK RIOT database schema (Phase 5). PostgreSQL via Prisma 7.
+//
+// Conventions:
+// - Currency and XP are integers (never floats). Balances have CHECK
+//   constraints (see migrations/*/migration.sql) so they can never go negative.
+// - Every reward or charge writes a LedgerEntry with a unique idempotency key,
+//   so replayed events cannot pay or charge twice.
+// - Finalised matches are immutable (a trigger refuses UPDATE on "match").
+// - Auth tables (user, session, account, verification) follow better-auth's
+//   expected shape; passwords live hashed in account.password only.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---- Authentication (better-auth) -------------------------------------------
+
+enum AccountStatus {
+  active
+  suspended
+}
+
+model User {
+  id            String        @id
+  /// Display name (also the public name).
+  name          String
+  email         String        @unique
+  emailVerified Boolean       @default(false)
+  image         String?
+  status        AccountStatus @default(active)
+  lastLoginAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  sessions        Session[]
+  accounts        Account[]
+  profile         PlayerProfile?
+  boardProgress   SoloBoardProgress[]
+  boardUnlocks    BoardUnlock[]
+  abilities       OwnedAbility[]
+  loadout         Loadout?
+  upgrades        UpgradeLevel[]
+  purchases       Purchase[]
+  ledger          LedgerEntry[]
+  soloRuns        SoloRun[]
+  ratings         Rating[]
+  leaderboard     LeaderboardEntry[]
+  matches         MatchParticipant[]
+  localImport     LocalImport?
+  importedRecords ImportedRecord[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  /// Password hash (scrypt, via better-auth). Never plaintext.
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+/// better-auth rate-limit storage (shared across restarts).
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rate_limit")
+}
+
+// ---- Player progression ---------------------------------------------------------
+
+model PlayerProfile {
+  userId           String   @id
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  xp               Int      @default(0)
+  /// Derived from xp (stored for leaderboards and matchmaking queries).
+  level            Int      @default(1)
+  coins            Int      @default(0)
+  selectedCosmetic String?
+  selectedBoardId  String?
+  settings         Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([level])
+  @@map("player_profile")
+}
+
+/// Verified solo records per board (only from server-replayed runs).
+model SoloBoardProgress {
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boardId         String
+  attempts        Int       @default(0)
+  completions     Int       @default(0)
+  bestScore       Int?
+  /// Best verified clear time in simulation ticks (120 per second).
+  bestTimeTicks   Int?
+  bestStars       Int       @default(0)
+  bestCombo       Int       @default(0)
+  masteryDone     String[]  @default([])
+  firstClearedAt  DateTime?
+  lastPlayedAt    DateTime?
+
+  @@id([userId, boardId])
+  @@map("solo_board_progress")
+}
+
+enum UnlockSource {
+  default
+  progression
+  import
+}
+
+model BoardUnlock {
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boardId      String
+  boardVersion Int
+  source       UnlockSource
+  unlockedAt   DateTime     @default(now())
+
+  @@id([userId, boardId])
+  @@map("board_unlock")
+}
+
+enum SoloRunStatus {
+  issued
+  verified
+  rejected
+  expired
+}
+
+/// A server-issued solo run: the server picks the seed and snapshots the
+/// equipment, then replays the submitted inputs before granting anything.
+model SoloRun {
+  id           String        @id
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boardId      String
+  boardVersion Int
+  seed         Int
+  /// Upgrade levels the run is simulated with (snapshot at issue time).
+  upgrades     Json
+  status       SoloRunStatus @default(issued)
+  issuedAt     DateTime      @default(now())
+  submittedAt  DateTime?
+  /// Replayed summary (verified runs only).
+  summary      Json?
+  /// Compact input log (evidence for leaderboards).
+  inputs       Bytes?
+  rejectReason String?
+  xpAwarded    Int           @default(0)
+  coinsAwarded Int           @default(0)
+
+  @@index([userId, issuedAt])
+  @@map("solo_run")
+}
+
+// ---- Equipment -----------------------------------------------------------------
+
+model OwnedAbility {
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  abilityId  String
+  /// 'level' (unlocked by player level) or 'starter'.
+  source     String
+  acquiredAt DateTime @default(now())
+
+  @@id([userId, abilityId])
+  @@map("owned_ability")
+}
+
+model Loadout {
+  userId         String   @id
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offensive      String
+  defensive      String
+  passive        String
+  /// Equipment Power Rating of loadout + upgrades (casual-upgrades view), cached.
+  equipmentPower Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@map("loadout")
+}
+
+model UpgradeLevel {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upgradeId String
+  level     Int
+  updatedAt DateTime @updatedAt
+
+  @@id([userId, upgradeId])
+  @@map("upgrade_level")
+}
+
+model Purchase {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upgradeId      String
+  fromLevel      Int
+  toLevel        Int
+  cost           Int
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@unique([userId, upgradeId, toLevel])
+  @@map("purchase")
+}
+
+// ---- Economy ledger ---------------------------------------------------------------
+
+enum Currency {
+  coins
+  xp
+}
+
+enum LedgerType {
+  solo_reward
+  match_reward
+  upgrade_purchase
+}
+
+model LedgerEntry {
+  id             String     @id @default(uuid())
+  userId         String
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency       Currency
+  /// Positive = earned, negative = spent.
+  amount         Int
+  balanceAfter   Int
+  type           LedgerType
+  /// The verified event behind it: solo run id, match id or purchase id.
+  sourceEvent    String
+  idempotencyKey String
+  createdAt      DateTime   @default(now())
+
+  @@unique([userId, idempotencyKey, currency])
+  @@index([userId, createdAt])
+  @@map("ledger_entry")
+}
+
+// ---- Matches ----------------------------------------------------------------------
+
+enum MatchMode {
+  private
+  quick
+}
+
+model Match {
+  id               String             @id
+  roomId           String
+  mode             MatchMode
+  devMode          Boolean
+  outcome          String
+  reason           String
+  winnerSeat       String?
+  startTick        Int
+  endTick          Int
+  durationTicks    Int
+  ticksPerSecond   Int
+  equipmentMode    String
+  replayVerified   Boolean
+  startedAt        DateTime
+  endedAt          DateTime
+  finalizedAt      DateTime           @default(now())
+  /// Full verification record: seeds, applied input logs, equipment, event log.
+  record           Json
+  compatibility    Json?
+  participants     MatchParticipant[]
+
+  @@index([finalizedAt])
+  @@map("match")
+}
+
+model MatchParticipant {
+  matchId          String
+  match            Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  seat             String
+  /// Null for guests (private rooms) or after account deletion.
+  userId           String?
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  displayName      String
+  boardId          String
+  boardVersion     Int
+  completionTick   Int?
+  exhaustedTick    Int?
+  score            Int
+  ballsRemaining   Int
+  bricksCleared    Int
+  bricksTotal      Int
+  forfeited        Boolean
+  /// 'win' | 'loss' | 'draw' | 'cancelled'
+  result           String
+  equipment        Json
+  equipmentPower   Int
+  /// Casual skill estimate before the match (matchmaking telemetry).
+  ratingBefore     Float?
+
+  @@id([matchId, seat])
+  @@index([userId])
+  @@index([boardId, boardVersion])
+  @@map("match_participant")
+}
+
+// ---- Ratings, seasons, leaderboards --------------------------------------------
+
+model Season {
+  id       String    @id
+  name     String
+  startsAt DateTime
+  endsAt   DateTime?
+  active   Boolean   @default(false)
+
+  @@map("season")
+}
+
+model Rating {
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'casual' (matchmaking estimate) or 'ranked' (not live until ranked launches).
+  queue              String
+  seasonId           String
+  rating             Float    @default(1500)
+  deviation          Float    @default(350)
+  volatility         Float    @default(0.06)
+  gamesPlayed        Int      @default(0)
+  placementRemaining Int      @default(10)
+  division           String?
+  updatedAt          DateTime @updatedAt
+
+  @@id([userId, queue, seasonId])
+  @@index([queue, seasonId, rating])
+  @@map("rating")
+}
+
+enum LeaderboardCategory {
+  solo_time
+  solo_score
+  mastery
+  casual_wins
+}
+
+/// One row per (category, board, season, player): the best verified value.
+model LeaderboardEntry {
+  category   LeaderboardCategory
+  /// Board id for per-board categories, '*' for global ones.
+  boardId    String
+  seasonId   String
+  userId     String
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Ticks for solo_time (lower is better); points or counts otherwise.
+  value      Int
+  /// Evidence: verified solo run id or match id.
+  evidenceId String
+  achievedAt DateTime            @default(now())
+
+  @@id([category, boardId, seasonId, userId])
+  @@index([category, boardId, seasonId, value])
+  @@map("leaderboard_entry")
+}
+
+// ---- Guest progress migration ------------------------------------------------------
+
+model LocalImport {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saveHash   String
+  importedAt DateTime @default(now())
+  summary    Json
+
+  @@map("local_import")
+}
+
+/// Unverified personal records carried over from a local save (never on leaderboards).
+model ImportedRecord {
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  boardId     String
+  completions Int
+  bestScore   Int?
+  bestTimeMs  Int?
+  bestStars   Int
+
+  @@id([userId, boardId])
+  @@map("imported_record")
+}
